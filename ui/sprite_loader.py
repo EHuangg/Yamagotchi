@@ -3,6 +3,11 @@ import os
 from PyQt6.QtGui import QPixmap, QPainter
 from PyQt6.QtCore import Qt
 
+def _clean_player_name(name: str) -> str:
+    """Strip suffixes like Jr., Sr., II, III, IV, V from player names."""
+    import re
+    return re.sub(r'\s+(Jr\.?|Sr\.?|II|III|IV|V)$', '', name.strip(), flags=re.IGNORECASE)
+
 SPRITE_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites')
 FRAME_SIZE   = 16
 DISPLAY_SIZE = 64
@@ -16,45 +21,45 @@ PLAYER_SKIN_MAP: dict[str, tuple[str, str]] = {
 DEFAULT_SKIN = "dark"
 DEFAULT_HAIR = "bald"
 
-# Maps ESPN NBA team name → jersey filename
+# Maps ESPN NBA FANTASY API team name → jersey filename
+# ** not the ESPN Scoreboard API **
 NBA_TEAM_JERSEY_MAP = {
     # Atlantic
-    "BOS": "celtics",
-    "BKN": "nets",
-    "NYK": "knicks",
-    "PHI": "76ers",
-    "PHL": "76ers",
-    "TOR": "raptors",
+    "BOS":  "celtics",
+    "BKN":  "nets",
+    "NYK":  "knicks",
+    "PHL":  "76ers",
+    "TOR":  "raptors",
     # Central
-    "CHI": "bulls",
-    "CLE": "caveliers",
-    "DET": "pistons",
-    "IND": "pacers",
-    "MIL": "bucks",
+    "CHI":  "bulls",
+    "CLE":  "caveliers",
+    "DET":  "pistons",
+    "IND":  "pacers",
+    "MIL":  "bucks",
     # Southeast
-    "ATL": "hawks",
-    "CHA": "hornets",
-    "MIA": "heat",
-    "ORL": "magic",
-    "WAS": "wizards",
+    "ATL":  "hawks",
+    "CHA":  "hornets",
+    "MIA":  "heat",
+    "ORL":  "magic",
+    "WAS":  "wizards",
     # Northwest
-    "DEN": "nuggets",
-    "MIN": "timberwolves",
-    "OKC": "thunder",
-    "POR": "trailblazers",
-    "UTA": "jazz",
+    "DEN":  "nuggets",
+    "MIN":  "timberwolves",
+    "OKC":  "thunder",
+    "POR":  "trailblazers",
+    "UTA":  "jazz",
     # Pacific
-    "GSW": "warriors",
-    "LAC": "clippers",
-    "LAL": "lakers",
-    "PHX": "suns",
-    "SAC": "kings",
+    "GSW":  "warriors",
+    "LAC":  "clippers",
+    "LAL":  "lakers",
+    "PHO":  "suns",
+    "SAC":  "kings",
     # Southwest
-    "DAL": "mavericks",
-    "HOU": "rockets",
-    "MEM": "grizzlies",
-    "NOP": "pelicans",
-    "SAS": "spurs",
+    "DAL":  "mavericks",
+    "HOU":  "rockets",
+    "MEM":  "grizzlies",
+    "NOP":  "pelicans",
+    "SAS":  "spurs",
 }
 
 def get_jersey_for_team(nba_team_name: str) -> str:
@@ -123,7 +128,8 @@ class SpriteLoader:
         return f"{skin}_{hair}+{jersey}"
 
     def get_idle_frames(self, player_name: str, jersey: str) -> list[QPixmap]:
-        skin, hair = PLAYER_SKIN_MAP.get(player_name, (DEFAULT_SKIN, DEFAULT_HAIR))
+        clean_name = _clean_player_name(player_name)
+        skin, hair = PLAYER_SKIN_MAP.get(clean_name, (DEFAULT_SKIN, DEFAULT_HAIR))
         body_key = f"{skin}_{hair}"
         cache_key = self._composite_key(skin, hair, jersey)
 

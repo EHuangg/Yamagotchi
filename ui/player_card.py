@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFontDatabase, QFont
-from ui.sprite_loader import sprite_loader, get_jersey_for_team
+from ui.sprite_loader import sprite_loader, get_jersey_for_team, _clean_player_name
 import os
 
 FONT_PATH = os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'pixel.ttf')
@@ -13,7 +13,8 @@ class PlayerCard(QWidget):
 
     def __init__(self, player_name: str, position: str, points: float = 0.0, nba_team: str = ""):
         super().__init__()
-        self.player_name = player_name
+        self.player_name = _clean_player_name(player_name)
+
         self.position = position
         self.points = points
         
@@ -42,7 +43,7 @@ class PlayerCard(QWidget):
         self._anim_timer.timeout.connect(self._tick_anim)
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(80, 120)
+        self.setFixedSize(80, 100)
         
                     
         
@@ -61,20 +62,30 @@ class PlayerCard(QWidget):
             self._pixel_font = QFont("Courier", 6)
 
     def _build_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-        layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        # Sprite display
+        # Background container covering sprite + name + points
+        self._bg_widget = QWidget()
+        self._bg_widget.setStyleSheet(
+            "background-color: rgba(50, 50, 50, 150); border-radius: 8px;"
+        )
+        self._bg_widget.setFixedSize(72, 90)
+
+        inner = QVBoxLayout(self._bg_widget)
+        inner.setContentsMargins(4, 4, 4, 4)
+        inner.setSpacing(1)
+        inner.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        # Sprite display — no background, container handles it
         self._sprite_label = QLabel()
         self._sprite_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._sprite_label.setFixedSize(64, 64)
-        self._sprite_label.setStyleSheet(
-            "background-color: rgba(50, 50, 50, 150); border-radius: 8px;"
-        )
+        self._sprite_label.setStyleSheet("background: transparent;")
 
-        # Player name — just last name to save space
+        # Player name
         short_name = self.player_name.split(" ")[-1]
         self._name_label = QLabel(short_name)
         self._name_label.setFont(self._pixel_font)
@@ -87,9 +98,11 @@ class PlayerCard(QWidget):
         self._points_label.setStyleSheet("color: #555555; background: transparent;")
         self._points_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        layout.addWidget(self._sprite_label)
-        layout.addWidget(self._name_label)
-        layout.addWidget(self._points_label)
+        inner.addWidget(self._sprite_label)
+        inner.addWidget(self._name_label)
+        inner.addWidget(self._points_label)
+
+        outer.addWidget(self._bg_widget)
 
     def update_points(self, new_points: float):
         self.points = new_points
@@ -159,8 +172,7 @@ class PlayerCard(QWidget):
             self._stop_pulse()
 
     def set_inactive(self, reason: str = ""):
-        """Grey out the card when player has no game today."""
-        self._sprite_label.setStyleSheet(
+        self._bg_widget.setStyleSheet(
             "background-color: rgba(30, 30, 30, 80); border-radius: 8px;"
         )
         self._name_label.setStyleSheet("color: #555555; background: transparent;")

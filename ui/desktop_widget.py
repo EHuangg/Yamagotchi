@@ -1,5 +1,5 @@
 import webbrowser
-from PyQt6.QtGui import QPainter, QAction
+from PyQt6.QtGui import QIcon, QPainter, QAction, QIcon
 from PyQt6.QtWidgets import QMainWindow, QMenu, QWidget
 from PyQt6.QtCore import Qt, QPoint, QEvent
 from ui.roster_view import RosterView
@@ -14,6 +14,8 @@ SETTINGS_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'setting
 class DesktopWidget(QMainWindow):
     def __init__(self, players=None):
         super().__init__()
+        # init icon 
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '..', 'assets', 'icon.ico')))
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |

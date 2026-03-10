@@ -1,7 +1,9 @@
 import sys
+import os
 import signal
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, qInstallMessageHandler
+from PyQt6.QtGui import QIcon
 from ui.desktop_widget import DesktopWidget
 from ui.setup_dialog import check_and_run_setup
 from ui.sprite_loader import sprite_loader
@@ -15,6 +17,8 @@ from events.event_bus import event_bus
 
 def main():
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')))
+
     def suppress_qt_warnings(msg_type, context, message):
         if "UpdateLayeredWindowIndirect" in message:
             return
@@ -62,7 +66,7 @@ def main():
     all_roster_names = list(set(all_roster_names))
     print(f"Tracking {len(all_roster_names)} players across all teams")
 
-    # Live client — must be created before live poller
+    # Live client
     live_client = LiveClient(scoring_settings)
 
     # Build UI
@@ -98,7 +102,6 @@ def main():
     widget.live_poller = live_poller
     widget.team_cache = team_cache
 
-    # Refresh matchup on live update
     def refresh_matchup():
         try:
             data = team_cache.get_team(widget._current_team_id)

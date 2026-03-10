@@ -60,7 +60,7 @@ class SetupDialog(QDialog):
         # League ID
         layout.addWidget(QLabel("League ID"))
         self._league_id = QLineEdit()
-        self._league_id.setPlaceholderText("e.g. 462390943")
+        self._league_id.setPlaceholderText("000000000")
         layout.addWidget(self._league_id)
 
         # espn_s2
