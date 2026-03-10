@@ -1,5 +1,6 @@
 # .gitattributes
 *.json linguist-detectable=false
 *.html linguist-detectable=false
-*.tex  linguist-detectable=false
-assets/* linguist-vendored=true
+*.css  linguist-detectable=false
+assets/** linguist-vendored=true
+*.png  linguist-detectable=false
