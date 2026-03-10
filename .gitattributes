@@ -1,2 +1,5 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# .gitattributes
+*.json linguist-detectable=false
+*.html linguist-detectable=false
+*.tex  linguist-detectable=false
+assets/* linguist-vendored=true
