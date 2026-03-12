@@ -117,21 +117,27 @@ class AnimationTrigger:
                 card.set_game_finished(player.points_this_week)
     
     def _handle_live_stats(self, stats: dict):
-        """
-        stats: player_name → {PTS, REB, AST, STL, BLK, TO, PF, fantasy_pts, game_status}
-        Routes live data to the correct PlayerCard by name.
-        """
-        # Build name→id map from current roster view
         for player_id, card in self.roster_view._cards.items():
             name = card.player_name
             if name in stats:
                 card.set_live_data(stats[name])
 
-                # Trigger animation if fantasy pts jumped since last check
                 new_fpts = stats[name].get('fantasy_pts', 0.0)
                 old_fpts = getattr(card, '_last_fpts', 0.0)
                 delta = new_fpts - old_fpts
+
+                new_fgm = stats[name].get('FGM', 0)
+                old_fgm = getattr(card, '_last_fgm', 0)
+
                 if delta > 0:
-                    self._handle('POINTS_SCORED' if delta < 8 else 'BIG_GAME',
-                                player_id, delta)
+                    # Field goal detected — play madeShot animation
+                    if new_fgm > old_fgm:
+                        card.animate('madeShot')
+                        self._handle('BIG_GAME' if delta >= 8 else 'POINTS_SCORED',
+                                    player_id, delta)
+                    else:
+                        # Points scored but no new FGM — likely free throws, no animation
+                        self._handle('POINTS_SCORED', player_id, delta)
+
                 card._last_fpts = new_fpts
+                card._last_fgm  = new_fgm

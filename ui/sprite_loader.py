@@ -1,65 +1,29 @@
 import json
 import os
+import re
 from PyQt6.QtGui import QPixmap, QPainter
 from PyQt6.QtCore import Qt
 
 def _clean_player_name(name: str) -> str:
-    """Strip suffixes like Jr., Sr., II, III, IV, V from player names."""
-    import re
     return re.sub(r'\s+(Jr\.?|Sr\.?|II|III|IV|V)$', '', name.strip(), flags=re.IGNORECASE)
 
 SPRITE_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites')
+MADE_SHOT_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites', 'madeShot')
 FRAME_SIZE   = 16
 DISPLAY_SIZE = 64
 
-# Player name → (skin_tone, hair_style)
-# Unmapped players default to ('dark', 'bald')
-PLAYER_SKIN_MAP: dict[str, tuple[str, str]] = {
-    # e.g. "Shai Gilgeous-Alexander": ("dark", "bald"),
-}
+PLAYER_SKIN_MAP: dict[str, tuple[str, str]] = {}
 
 DEFAULT_SKIN = "dark"
 DEFAULT_HAIR = "bald"
 
-# Maps ESPN NBA FANTASY API team name → jersey filename
-# ** not the ESPN Scoreboard API **
 NBA_TEAM_JERSEY_MAP = {
-    # Atlantic
-    "BOS":  "celtics",
-    "BKN":  "nets",
-    "NYK":  "knicks",
-    "PHL":  "76ers",
-    "TOR":  "raptors",
-    # Central
-    "CHI":  "bulls",
-    "CLE":  "caveliers",
-    "DET":  "pistons",
-    "IND":  "pacers",
-    "MIL":  "bucks",
-    # Southeast
-    "ATL":  "hawks",
-    "CHA":  "hornets",
-    "MIA":  "heat",
-    "ORL":  "magic",
-    "WAS":  "wizards",
-    # Northwest
-    "DEN":  "nuggets",
-    "MIN":  "timberwolves",
-    "OKC":  "thunder",
-    "POR":  "trailblazers",
-    "UTA":  "jazz",
-    # Pacific
-    "GSW":  "warriors",
-    "LAC":  "clippers",
-    "LAL":  "lakers",
-    "PHO":  "suns",
-    "SAC":  "kings",
-    # Southwest
-    "DAL":  "mavericks",
-    "HOU":  "rockets",
-    "MEM":  "grizzlies",
-    "NOP":  "pelicans",
-    "SAS":  "spurs",
+    "BOS": "celtics", "BKN": "nets", "NYK": "knicks", "PHL": "76ers", "TOR": "raptors",
+    "CHI": "bulls", "CLE": "caveliers", "DET": "pistons", "IND": "pacers", "MIL": "bucks",
+    "ATL": "hawks", "CHA": "hornets", "MIA": "heat", "ORL": "magic", "WAS": "wizards",
+    "DEN": "nuggets", "MIN": "timberwolves", "OKC": "thunder", "POR": "trailblazers", "UTA": "jazz",
+    "GSW": "warriors", "LAC": "clippers", "LAL": "lakers", "PHO": "suns", "SAC": "kings",
+    "DAL": "mavericks", "HOU": "rockets", "MEM": "grizzlies", "NOP": "pelicans", "SAS": "spurs",
 }
 
 def get_jersey_for_team(nba_team_name: str) -> str:
@@ -71,6 +35,13 @@ class SpriteLoader:
         self._body_frames: dict[str, list[QPixmap]] = {}
         self._jersey_frames: dict[str, list[QPixmap]] = {}
         self._composited: dict[str, list[QPixmap]] = {}
+
+        # madeShot layers
+        self._made_body_frames: dict[str, list[QPixmap]] = {}
+        self._made_jersey_frames: dict[str, list[QPixmap]] = {}
+        self._made_composited: dict[str, list[QPixmap]] = {}
+        self._made_ball_frames: list[QPixmap] = []
+
         self._animations: dict = {}
         self._loaded = False
 
@@ -86,23 +57,56 @@ class SpriteLoader:
             print(f"[SpriteLoader] Could not load animations.json: {e}")
             self._animations = {"idle": {"frames": [0,1,2,3,4,5], "fps": 3}}
 
+        # Load idle body sheets
         idle_dir = os.path.join(SPRITE_DIR, 'idle')
-
         for filename in os.listdir(os.path.join(idle_dir, 'body')):
             if not filename.endswith('.png'):
                 continue
             key = filename.replace('.png', '')
-            path = os.path.join(idle_dir, 'body', filename)
-            self._body_frames[key] = self._slice_sheet(path)
-            print(f"[SpriteLoader] Loaded body: {key} ({len(self._body_frames[key])} frames)")
+            self._body_frames[key] = self._slice_sheet(
+                os.path.join(idle_dir, 'body', filename)
+            )
+            print(f"[SpriteLoader] Loaded idle body: {key} ({len(self._body_frames[key])} frames)")
 
+        # Load idle jersey sheets
         for filename in os.listdir(os.path.join(idle_dir, 'jerseys')):
             if not filename.endswith('.png'):
                 continue
             key = filename.replace('.png', '')
-            path = os.path.join(idle_dir, 'jerseys', filename)
-            self._jersey_frames[key] = self._slice_sheet(path)
-            print(f"[SpriteLoader] Loaded jersey: {key} ({len(self._jersey_frames[key])} frames)")
+            self._jersey_frames[key] = self._slice_sheet(
+                os.path.join(idle_dir, 'jerseys', filename)
+            )
+            print(f"[SpriteLoader] Loaded idle jersey: {key} ({len(self._jersey_frames[key])} frames)")
+
+        # Load madeShot body sheets
+        made_body_dir = os.path.join(MADE_SHOT_DIR, 'body')
+        if os.path.exists(made_body_dir):
+            for filename in os.listdir(made_body_dir):
+                if not filename.endswith('.png'):
+                    continue
+                key = filename.replace('.png', '')
+                self._made_body_frames[key] = self._slice_sheet(
+                    os.path.join(made_body_dir, filename)
+                )
+                print(f"[SpriteLoader] Loaded madeShot body: {key} ({len(self._made_body_frames[key])} frames)")
+
+        # Load madeShot jersey sheets
+        made_jersey_dir = os.path.join(MADE_SHOT_DIR, 'jerseys')
+        if os.path.exists(made_jersey_dir):
+            for filename in os.listdir(made_jersey_dir):
+                if not filename.endswith('.png'):
+                    continue
+                key = filename.replace('.png', '')
+                self._made_jersey_frames[key] = self._slice_sheet(
+                    os.path.join(made_jersey_dir, filename)
+                )
+                print(f"[SpriteLoader] Loaded madeShot jersey: {key} ({len(self._made_jersey_frames[key])} frames)")
+
+        # Load ball
+        ball_path = os.path.join(MADE_SHOT_DIR, 'ball.png')
+        if os.path.exists(ball_path):
+            self._made_ball_frames = self._slice_sheet(ball_path)
+            print(f"[SpriteLoader] Loaded madeShot ball ({len(self._made_ball_frames)} frames)")
 
         self._loaded = True
 
@@ -111,7 +115,6 @@ class SpriteLoader:
         if sheet.isNull():
             print(f"[SpriteLoader] Failed to load: {path}")
             return []
-
         frame_count = sheet.width() // FRAME_SIZE
         frames = []
         for i in range(frame_count):
@@ -123,6 +126,22 @@ class SpriteLoader:
             )
             frames.append(scaled)
         return frames
+
+    def _composite(self, body_frames, jersey_frames, ball_frames=None) -> list[QPixmap]:
+        """Composite body + jersey (+ optional ball) per frame."""
+        composited = []
+        for i, body in enumerate(body_frames):
+            result = QPixmap(body.size())
+            result.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(result)
+            painter.drawPixmap(0, 0, body)
+            if i < len(jersey_frames):
+                painter.drawPixmap(0, 0, jersey_frames[i])
+            if ball_frames and i < len(ball_frames):
+                painter.drawPixmap(0, 0, ball_frames[i])
+            painter.end()
+            composited.append(result)
+        return composited
 
     def _composite_key(self, skin: str, hair: str, jersey: str) -> str:
         return f"{skin}_{hair}+{jersey}"
@@ -140,26 +159,38 @@ class SpriteLoader:
         jersey_frames = self._jersey_frames.get(jersey, [])
 
         if not body_frames:
-            print(f"[SpriteLoader] Missing body: {body_key}")
+            print(f"[SpriteLoader] Missing idle body: {body_key}")
             return []
-
         if not jersey_frames:
-            print(f"[SpriteLoader] Missing jersey: {jersey}, falling back to lakers")
+            print(f"[SpriteLoader] Missing idle jersey: {jersey}, falling back to lakers")
             jersey_frames = self._jersey_frames.get("lakers", [])
 
-        composited = []
-        for i, body in enumerate(body_frames):
-            result = QPixmap(body.size())
-            result.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(result)
-            painter.drawPixmap(0, 0, body)
-            if i < len(jersey_frames):
-                painter.drawPixmap(0, 0, jersey_frames[i])
-            painter.end()
-            composited.append(result)
+        self._composited[cache_key] = self._composite(body_frames, jersey_frames)
+        return self._composited[cache_key]
 
-        self._composited[cache_key] = composited
-        return composited
+    def get_made_shot_frames(self, player_name: str, jersey: str) -> list[QPixmap]:
+        clean_name = _clean_player_name(player_name)
+        skin, hair = PLAYER_SKIN_MAP.get(clean_name, (DEFAULT_SKIN, DEFAULT_HAIR))
+        body_key = f"{skin}_{hair}"
+        cache_key = f"made+{skin}_{hair}+{jersey}"
+
+        if cache_key in self._made_composited:
+            return self._made_composited[cache_key]
+
+        body_frames   = self._made_body_frames.get(body_key, [])
+        jersey_frames = self._made_jersey_frames.get(jersey, [])
+
+        if not body_frames:
+            print(f"[SpriteLoader] Missing madeShot body: {body_key}")
+            return []
+        if not jersey_frames:
+            print(f"[SpriteLoader] Missing madeShot jersey: {jersey}, falling back to lakers")
+            jersey_frames = self._made_jersey_frames.get("lakers", [])
+
+        self._made_composited[cache_key] = self._composite(
+            body_frames, jersey_frames, self._made_ball_frames
+        )
+        return self._made_composited[cache_key]
 
     def get_animation(self, name: str) -> dict:
         return self._animations.get(name, {"frames": [0,1,2,3,4,5], "fps": 3})

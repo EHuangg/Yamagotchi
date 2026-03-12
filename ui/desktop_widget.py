@@ -145,6 +145,12 @@ class DesktopWidget(QMainWindow):
                 card.set_season_avg(player.projected_points)
                 if player.name in self._live_data_cache:
                     card.set_live_data(self._live_data_cache[player.name])
+                    
+        def _apply_live_to_card(card, name):
+            if name in self._live_data_cache:
+                card.set_live_data(self._live_data_cache[name])
+
+        self.roster_view._live_data_applier = _apply_live_to_card
 
         event_bus.matchup_updated.emit(data['matchup'])
         self._save_last_team_id(team_id)
@@ -193,13 +199,18 @@ class DesktopWidget(QMainWindow):
             }
         """)
 
-        toggle_action = QAction(
-            "Show Full Roster" if not self.roster_view._show_full_roster
-            else "Show Starters Only",
-            self
-        )
-        toggle_action.triggered.connect(self.roster_view.toggle_roster_size)
-        menu.addAction(toggle_action)
+        ## Toggling between menu modes ##
+        mode_menu = menu.addMenu("Display Mode")
+        mode_menu.setStyleSheet(menu.styleSheet())
+
+        for label, mode in [("Single Player", "SINGLE"),
+                            ("Starters", "STARTERS"),
+                            ("Full Roster", "FULL")]:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(self.roster_view._mode == mode)
+            action.triggered.connect(lambda checked, m=mode: self._set_display_mode(m))
+            mode_menu.addAction(action)
 
         open_action = QAction("Open League in Browser", self)
         open_action.triggered.connect(self._open_league)
@@ -268,6 +279,20 @@ class DesktopWidget(QMainWindow):
 
         except Exception as e:
             print(f"[Settings] Reload failed: {e}")
+
+    def _set_display_mode(self, mode: str):
+        self.roster_view.set_mode(mode)
+        players = self.roster_view._full_players if mode == 'FULL' else self.roster_view._starter_players
+        count = len(players)
+        if mode == 'SINGLE':
+            count = 1
+        self._resize_to_roster(count)
+        self._install_filter_recursive(self.roster_view)
+        # Reapply live data
+        for name, data in self._live_data_cache.items():
+            for card in self.roster_view._cards.values():
+                if card.player_name == name or card.player_name in name:
+                    card.set_live_data(data)
 
     def _quit(self):
         from PyQt6.QtWidgets import QApplication

@@ -33,7 +33,12 @@ class PlayerCard(QWidget):
         self._setup_font()
         self._build_ui()
         
+        
+        ## Player Card 
         PlayerCard._all_cards.append(self)
+        
+        self.destroyed.connect(lambda: PlayerCard._all_cards.remove(self) 
+                       if self in PlayerCard._all_cards else None)
 
         self._idle_timer = QTimer()
         self._idle_timer.timeout.connect(self._tick_idle)
@@ -45,13 +50,6 @@ class PlayerCard(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(80, 100)
         
-                    
-        
-    def __del__(self):
-        try:
-            PlayerCard._all_cards.remove(self)
-        except ValueError:
-            pass
 
     def _setup_font(self):
         font_id = QFontDatabase.addApplicationFont(FONT_PATH)
@@ -130,23 +128,41 @@ class PlayerCard(QWidget):
         self._sprite_label.setPixmap(self._idle_pixmaps[self._idle_index])
         
     # --- Event animation (plays once, then returns to idle) ---
-
     def animate(self, animation_name: str):
         anim = sprite_loader.get_animation(animation_name)
         self._frame_list = anim["frames"]
         self._frame_index = 0
+        self._current_anim = animation_name
         fps = anim.get("fps", 8)
         self._idle_timer.stop()
+
+        # Pre-load the right frames for this animation
+        if animation_name == 'madeShot':
+            self._anim_pixmaps = sprite_loader.get_made_shot_frames(
+                self.player_name, self._jersey
+            )
+        else:
+            self._anim_pixmaps = []
+
         self._anim_timer.start(1000 // fps)
 
     def _tick_anim(self):
         if self._frame_index >= len(self._frame_list):
             self._anim_timer.stop()
+            self._current_anim = "idle"
             self._start_idle()
             return
-        self._show_frame(self._frame_list[self._frame_index])
-        self._frame_index += 1
 
+        idx = self._frame_list[self._frame_index]
+        if self._anim_pixmaps and idx < len(self._anim_pixmaps):
+            self._sprite_label.setPixmap(self._anim_pixmaps[idx])
+        else:
+            pixmap = sprite_loader.get_frame(idx)
+            if pixmap:
+                self._sprite_label.setPixmap(pixmap)
+
+        self._frame_index += 1
+        
     # --- Shared frame display ---
 
     def _show_frame(self, frame_index: int):
@@ -205,10 +221,17 @@ class PlayerCard(QWidget):
         
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Advance shared view mode
             idx = PlayerCard.VIEWS.index(PlayerCard._current_view)
             PlayerCard._current_view = PlayerCard.VIEWS[(idx + 1) % len(PlayerCard.VIEWS)]
-            # Refresh all cards
+            # Filter out deleted cards before refreshing
+            alive = []
+            for card in PlayerCard._all_cards:
+                try:
+                    card._points_label.objectName()  # will throw if deleted
+                    alive.append(card)
+                except RuntimeError:
+                    pass
+            PlayerCard._all_cards = alive
             for card in PlayerCard._all_cards:
                 card._refresh_display()
             

@@ -58,6 +58,9 @@ class LivePoller(QThread):
             stats = self.client.get_all_live_stats_for_roster(
                 self.roster_names, games
             )
+            
+            ################################ Delete later, Debugging #############################
+            print(stats)
 
             if stats:
                 # Only emit players whose stats actually changed
