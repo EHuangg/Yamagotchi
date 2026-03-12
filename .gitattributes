@@ -4,3 +4,4 @@
 *.css  linguist-detectable=false
 assets/** linguist-vendored=true
 *.png  linguist-detectable=false
+*.toc linguist-detectable=false
