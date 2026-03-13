@@ -1,12 +1,15 @@
 import sys
 import os
 import signal
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import QTimer, qInstallMessageHandler
-from PyQt6.QtGui import QIcon
-from ui.desktop_widget import DesktopWidget
+from PyQt6.QtGui import QIcon, QAction
+
+from ui.desktop_widget import DesktopWidget, BAR_THICKNESS
 from ui.setup_dialog import check_and_run_setup
 from ui.sprite_loader import sprite_loader
+from ui.appbar import AppBar
+
 from api.espn_client import ESPNClient
 from api.live_client import LiveClient
 from api.team_cache import TeamCache
@@ -56,7 +59,7 @@ def main():
     initial_team = team_cache.get_team(last_team_id) or team_cache.get_team(
         team_cache.all_team_ids[0]
     )
-    initial_snapshot = initial_team.get('snapshot', [])
+    initial_snapshot = initial_team.get('full_snapshot', [])
 
     # Collect ALL player names across every team for live polling
     all_roster_names = []
@@ -69,10 +72,74 @@ def main():
     # Live client
     live_client = LiveClient(scoring_settings)
 
-    # Build UI
+    # Build UI — set_team_cache handles initial matchup emit
     widget = DesktopWidget(players=initial_snapshot)
     widget.show()
     widget.set_team_cache(team_cache)
+
+
+    # System Tray Menu - for minimizing tray
+    tray = QSystemTrayIcon(QIcon(os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')), app)
+    tray_menu = QMenu()
+    tray_menu.setStyleSheet("""
+        QMenu {
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            border: 1px solid #45475a;
+            border-radius: 8px;
+            padding: 4px;
+            font-size: 12px;
+        }
+        QMenu::item { padding: 6px 20px; border-radius: 4px; }
+        QMenu::item:selected { background-color: #313244; }
+    """)
+
+    show_action = QAction("Show", app)
+    hide_action = QAction("Hide", app)
+    quit_action = QAction("Quit", app)
+
+    def show_widget():
+        widget.show()
+        show_action.setVisible(False)
+        hide_action.setVisible(True)
+        QTimer.singleShot(100, _reregister_appbar)
+
+    # on second show after hiding
+    def _reregister_appbar():
+        screens = QApplication.screens()
+        try:
+            with open(SETTINGS_PATH) as f:
+                idx = json.load(f).get('monitor', 0)
+            screen = screens[idx] if idx < len(screens) else screens[0]
+        except Exception:
+            screen = screens[0]
+        widget._appbar = AppBar(int(widget.winId()), BAR_THICKNESS)
+        widget._appbar.register(widget._edge, screen=screen.geometry())
+
+    def hide_widget():
+        if widget._appbar:
+            widget._appbar.unregister()
+            widget._appbar = None
+        widget.hide()
+        show_action.setVisible(True)
+        hide_action.setVisible(False)
+
+    show_action.triggered.connect(show_widget)
+    hide_action.triggered.connect(hide_widget)
+    quit_action.triggered.connect(lambda: (widget._appbar.unregister() if widget._appbar else None, app.quit()))
+
+    show_action.setVisible(False)
+    tray_menu.addAction(show_action)
+    tray_menu.addAction(hide_action)
+    tray_menu.addSeparator()
+    tray_menu.addAction(quit_action)
+
+    tray.setContextMenu(tray_menu)
+    tray.setToolTip("Yamagotchi")
+    tray.activated.connect(lambda reason: show_widget() if reason == QSystemTrayIcon.ActivationReason.DoubleClick and not widget.isVisible() else hide_widget() if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None)
+    tray.show()
+
+    widget.tray = tray  # keep reference alive
 
     # Wire event bus
     trigger = AnimationTrigger(widget.roster_view)
@@ -82,9 +149,6 @@ def main():
         card = widget.roster_view.get_card(player.player_id)
         if card:
             card.set_season_avg(player.projected_points)
-
-    # Initial matchup
-    event_bus.matchup_updated.emit(initial_team.get('matchup', {}))
 
     # Pollers
     poller = Poller(client, initial_snapshot)
@@ -102,17 +166,17 @@ def main():
     widget.live_poller = live_poller
     widget.team_cache = team_cache
 
-    def refresh_matchup():
-        try:
-            data = team_cache.get_team(widget._current_team_id)
-            if data and data.get('matchup'):
-                event_bus.matchup_updated.emit(data['matchup'])
-        except Exception as e:
-            print(f"Matchup refresh failed: {e}")
-
     def on_live_stats_updated(stats: dict):
         widget._live_data_cache.update(stats)
-        refresh_matchup()
+        # Update scores in current matchup display without overwriting team IDs
+        current = widget._current_matchup_data
+        if current and current.get('my_team_id'):
+            my_data  = team_cache.get_team(current['my_team_id'])
+            opp_data = team_cache.get_team(current['opp_team_id'])
+            if my_data and opp_data:
+                current['my_score']  = my_data['matchup'].get('my_score', current['my_score'])
+                current['opp_score'] = my_data['matchup'].get('opp_score', current['opp_score'])
+                event_bus.matchup_updated.emit(current)
 
     event_bus.live_stats_updated.connect(on_live_stats_updated)
     event_bus.daily_reset.connect(lambda: widget._live_data_cache.clear())

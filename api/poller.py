@@ -64,7 +64,7 @@ class Poller(QThread):
                     elif e.event_type == "GAME_STARTED":
                         event_bus.game_started.emit(e.player_id, e.delta)
 
-                    print(f"[Event] {e.player_name}: {e.event_type} +{e.delta}pts")
+                    # print(f"[Event] {e.player_name}: {e.event_type} +{e.delta}pts")
 
             except Exception as ex:
                 print(f"[Poller] Error: {ex}")

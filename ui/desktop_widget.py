@@ -16,15 +16,33 @@ BAR_THICKNESS = 100
 
 
 class ClickableLabel(QLabel):
-    def __init__(self, text='', on_click=None):
+    def __init__(self, text='', on_click=None, hover_color='#89b4fa',
+                 default_color='#6c7086', selected_color='#cdd6f4'):
         super().__init__(text)
         self._on_click = on_click
+        self._hover_color = hover_color
+        self._default_color = default_color
+        self._selected_color = selected_color
+        self._selected = False
+        self._base_style = ""
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_selected(self, selected: bool, base_style: str = ""):
+        self._selected = selected
+        self._base_style = base_style
+        color = self._selected_color if selected else self._default_color
+        self.setStyleSheet(f"color: {color}; {base_style}")
+
+    def enterEvent(self, event):
+        self.setStyleSheet(f"color: {self._hover_color}; {self._base_style}")
+
+    def leaveEvent(self, event):
+        color = self._selected_color if self._selected else self._default_color
+        self.setStyleSheet(f"color: {color}; {self._base_style}")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._on_click:
             self._on_click()
-
 
 class DesktopWidget(QMainWindow):
     def __init__(self, players=None):
@@ -120,6 +138,44 @@ class DesktopWidget(QMainWindow):
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
         """)
+        
+        # Navigation buttons at bottom
+        nav_widget = QWidget()
+        nav_widget.setFixedHeight(36)
+        nav_widget.setStyleSheet(
+            "background-color: rgba(30, 30, 50, 240); border: none;"
+        )
+        nav_layout = QHBoxLayout(nav_widget)
+        nav_layout.setContentsMargins(4, 4, 4, 4)
+        nav_layout.setSpacing(4)
+
+        prev_btn = ClickableLabel("◀", on_click=lambda: self._cycle_matchup('prev'))
+        prev_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        prev_btn.setFixedWidth(40)
+        prev_btn.setStyleSheet(
+            "color: #89b4fa; font-size: 16px; font-weight: bold;"
+            "background: rgba(49,50,68,180); border-radius: 4px;"
+        )
+
+        next_btn = ClickableLabel("▶", on_click=lambda: self._cycle_matchup('next'))
+        next_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        next_btn.setFixedWidth(40)
+        next_btn.setStyleSheet(
+            "color: #89b4fa; font-size: 16px; font-weight: bold;"
+            "background: rgba(49,50,68,180); border-radius: 4px;"
+        )
+
+        self._matchup_counter_label = QLabel("— / —")
+        self._matchup_counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._matchup_counter_label.setStyleSheet(
+            "color: #6c7086; font-size: 10px;"
+        )
+
+        nav_layout.addWidget(prev_btn)
+        nav_layout.addWidget(self._matchup_counter_label)
+        nav_layout.addWidget(next_btn)
+
+        self._main_layout.addWidget(nav_widget)
 
         self._players_widget = QWidget()
         self._players_widget.setStyleSheet("background: transparent;")
@@ -195,7 +251,6 @@ class DesktopWidget(QMainWindow):
             self._appbar.set_edge(edge)
 
     # ── Scoreboard ────────────────────────────────────────────────────────────
-
     def _on_matchup_updated(self, data: dict):
         if not data:
             self._team_name_label.setText("—")
@@ -205,31 +260,52 @@ class DesktopWidget(QMainWindow):
             self._current_matchup_data = {}
             return
 
-        # Store all data fields including team IDs so buttons work
         self._current_matchup_data = data
-        
         my_team   = data.get('my_team',   '—')
         my_score  = data.get('my_score',  0.0)
         opp_score = data.get('opp_score', 0.0)
         opp_name  = data.get('opp_team',  '?')
         winning   = my_score >= opp_score
 
-        self._team_name_label.setText(my_team)
-        self._my_score_label.setText(f"{my_score:.1f}")
-        self._my_score_label.setStyleSheet(
-            f"color: {'#a6e3a1' if winning else '#f38ba8'}; "
-            "font-size: 18px; font-weight: bold;"
-        )
-        self._opp_score_label.setText(f"{opp_score:.1f}")
-        self._opp_name_label.setText(opp_name)
+        my_selected  = self._current_team_id == data.get('my_team_id')
+        opp_selected = self._current_team_id == data.get('opp_team_id')
 
+        score_style   = "font-size: 18px; font-weight: bold;"
+        name_style    = "font-size: 11px; font-weight: bold;"
+        opp_score_style = "font-size: 18px;"
+        opp_name_style  = "font-size: 11px;"
+
+        win_color  = '#a6e3a1'
+        lose_color = '#f38ba8'
+
+        self._team_name_label.setText(my_team)
+        self._team_name_label.set_selected(my_selected, name_style)
+
+        my_score_color = (win_color if winning else lose_color) if my_selected else ""
+        self._my_score_label.setText(f"{my_score:.1f}")
+        self._my_score_label.set_selected(my_selected,
+            f"{score_style} color: {my_score_color};" if my_score_color else score_style)
+
+        opp_score_color = (lose_color if winning else win_color) if opp_selected else ""
+        self._opp_score_label.setText(f"{opp_score:.1f}")
+        self._opp_score_label.set_selected(opp_selected,
+            f"{opp_score_style} color: {opp_score_color};" if opp_score_color else opp_score_style)
+
+        self._opp_name_label.setText(opp_name)
+        self._opp_name_label.set_selected(opp_selected, opp_name_style)
+        
+    
     def _click_my_team(self):
+        # print(f"[Debug] _click_my_team fired, data: {self._current_matchup_data}")
         team_id = self._current_matchup_data.get('my_team_id')
+        # print(f"[Debug] my_team_id: {team_id}")
         if team_id:
             self._switch_to_team(team_id)
 
     def _click_opp_team(self):
+        # print(f"[Debug] _click_opp_team fired, data: {self._current_matchup_data}")
         team_id = self._current_matchup_data.get('opp_team_id')
+        # print(f"[Debug] opp_team_id: {team_id}")
         if team_id:
             self._switch_to_team(team_id)
 
@@ -237,20 +313,40 @@ class DesktopWidget(QMainWindow):
 
     def set_team_cache(self, cache):
         self._team_cache = cache
+        self._current_matchup_idx = 0
+        selected_matchup = None
+
         for i in range(cache.matchup_count()):
             m = cache.get_matchup(i)
-            if m.get('my_team_id') == self._current_team_id or \
-               m.get('opp_team_id') == self._current_team_id:
+            if m.get('my_team_id') == self._current_team_id:
                 self._current_matchup_idx = i
+                selected_matchup = m
                 break
-        matchup = cache.get_matchup(self._current_matchup_idx)
-        # Populate _current_matchup_data immediately so scoreboard buttons work
-        # Ensure team_id keys are present
-        if matchup and 'my_team_id' not in matchup:
-            matchup['my_team_id'] = self._current_team_id
-        self._current_matchup_data = matchup or {}
-        event_bus.matchup_updated.emit(matchup)
+            elif m.get('opp_team_id') == self._current_team_id:
+                self._current_matchup_idx = i
+                selected_matchup = {
+                    'my_team':     m['opp_team'],
+                    'my_score':    m['opp_score'],
+                    'my_team_id':  m['opp_team_id'],
+                    'opp_team':    m['my_team'],
+                    'opp_score':   m['my_score'],
+                    'opp_team_id': m['my_team_id'],
+                }
+                break
+
+        # Clamp in case matchup count shrank since last week
+        self._current_matchup_idx = min(
+            self._current_matchup_idx,
+            max(0, cache.matchup_count() - 1)
+        )
+
+        if selected_matchup is None:
+            selected_matchup = cache.get_matchup(0)
+
+        self._current_matchup_data = selected_matchup
+        event_bus.matchup_updated.emit(selected_matchup)
         self._switch_to_team(self._current_team_id)
+        self._update_nav_counter()
 
     def _switch_to_team(self, team_id: int):
         if not self._team_cache:
@@ -260,24 +356,13 @@ class DesktopWidget(QMainWindow):
             return
 
         self._current_team_id = team_id
-        players = data['snapshot']
-        
-        # Optimize: check if roster has actually changed before full rebuild
+        players = data['full_snapshot']
+
         old_player_ids = set(self._cards.keys())
         new_player_ids = set(p.player_id for p in players)
-        
+
         if old_player_ids != new_player_ids:
-            # Roster changed - rebuild
             self._build_player_rows(players)
-        else:
-            # Roster same - just update existing cards
-            for player in players:
-                card = self._cards.get(player.player_id)
-                if card:
-                    card.set_season_avg(player.projected_points)
-                    if player.name in self._live_data_cache:
-                        card.set_live_data(self._live_data_cache[player.name])
-            return
 
         for player in players:
             card = self._cards.get(player.player_id)
@@ -287,7 +372,17 @@ class DesktopWidget(QMainWindow):
                     card.set_live_data(self._live_data_cache[player.name])
 
         self._save_last_team_id(team_id)
-
+        # Refresh scoreboard highlight
+        if self._current_matchup_data:
+            self._on_matchup_updated(self._current_matchup_data)
+    
+    def _update_nav_counter(self):
+        if self._team_cache:
+            total = self._team_cache.matchup_count()
+            self._matchup_counter_label.setText(
+                f"{self._current_matchup_idx + 1} / {total}"
+            )
+        
     def _cycle_matchup(self, direction: str):
         if not self._team_cache:
             return
@@ -300,13 +395,12 @@ class DesktopWidget(QMainWindow):
             self._current_matchup_idx = (self._current_matchup_idx - 1) % count
 
         matchup = self._team_cache.get_matchup(self._current_matchup_idx)
-        
-        # Switch to the my_team from this matchup
+        self._current_matchup_data = matchup or {}
+        event_bus.matchup_updated.emit(matchup)
         my_team_id = matchup.get('my_team_id')
         if my_team_id:
             self._switch_to_team(my_team_id)
-        
-        event_bus.matchup_updated.emit(matchup)
+        self._update_nav_counter()
 
     # ── Context menu ──────────────────────────────────────────────────────────
 
@@ -326,6 +420,12 @@ class DesktopWidget(QMainWindow):
             QMenu::separator { height: 1px; background: #45475a; margin: 4px 8px; }
         """)
 
+        collapse_action = QAction("Hide", self)
+        collapse_action.triggered.connect(self._hide_and_unregister)
+        menu.addAction(collapse_action)
+
+        menu.addSeparator()
+
         prev_action = QAction("◀ Previous Matchup", self)
         prev_action.triggered.connect(lambda: self._cycle_matchup('prev'))
         menu.addAction(prev_action)
@@ -339,7 +439,7 @@ class DesktopWidget(QMainWindow):
         edge_menu = menu.addMenu("Dock Edge")
         edge_menu.setStyleSheet(menu.styleSheet())
         for label, edge in [("Left", "left"), ("Right", "right"),
-                              ("Top", "top"), ("Bottom", "bottom")]:
+                            ("Top", "top"), ("Bottom", "bottom")]:
             a = QAction(label, self)
             a.setCheckable(True)
             a.setChecked(self._edge == edge)
@@ -406,6 +506,12 @@ class DesktopWidget(QMainWindow):
                 json.dump(s, f, indent=2)
         except Exception as e:
             print(f"[DesktopWidget] Failed to save setting {key}: {e}")
+
+    def _hide_and_unregister(self):
+        if self._appbar:
+            self._appbar.unregister()
+            self._appbar = None
+        self.hide()
 
     # ── Misc ──────────────────────────────────────────────────────────────────
 

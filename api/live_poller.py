@@ -32,44 +32,30 @@ class LivePoller(QThread):
         self.roster_names = names
 
     def run(self):
-        # Fetch immediately on startup before first sleep
         self._fetch_and_emit()
-
         while self._running:
             if not self._force:
                 interval = self._get_interval()
-                print(f"[LivePoller] Sleeping {interval}s")
                 self.msleep(interval * 1000)
-
             self._force = False
-
             if not self._running:
                 break
-
             self._fetch_and_emit()
 
     def _fetch_and_emit(self):
         try:
             games = self.client.get_todays_games()
-
             if not games:
                 return
 
             stats = self.client.get_all_live_stats_for_roster(
                 self.roster_names, games
             )
-            
-            ################################ Delete later, Debugging #############################
-            print(stats)
 
             if stats:
-                # Only emit players whose stats actually changed
                 changed = self._get_changed(stats)
                 if changed:
-                    print(f"[LivePoller] {len(changed)} player(s) updated")
                     event_bus.live_stats_updated.emit(changed)
-                
-                # Always update full stats reference
                 self._last_stats = stats
 
         except Exception as ex:
