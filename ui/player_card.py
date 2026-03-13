@@ -269,7 +269,7 @@ class PlayerCard(QWidget):
                 self._points_label.setStyleSheet("color: #a6e3a1; background: transparent;")
                 self._points_label.setText(f"{fpts:.1f}")
                 self._name_label.setText(
-                    self.player_name.split()[-1] + " 🔴" if status == 'STATUS_IN_PROGRESS'
+                    self.player_name.split()[-1] if status == 'STATUS_IN_PROGRESS'
                     else self.player_name.split()[-1] + " ⏸"
                 )
             elif status == 'STATUS_FINAL':

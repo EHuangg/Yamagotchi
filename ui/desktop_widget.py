@@ -1,21 +1,38 @@
-import webbrowser
-from PyQt6.QtGui import QIcon, QPainter, QAction, QIcon
-from PyQt6.QtWidgets import QMainWindow, QMenu, QWidget
-from PyQt6.QtCore import Qt, QPoint, QEvent
-from ui.roster_view import RosterView
-from api.espn_client import ESPNClient
-from api.team_cache import TeamCache
-from events.event_bus import event_bus
-import json
 import os
+import json
+import webbrowser
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QScrollArea, QLabel, QMenu, QApplication
+)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QIcon, QAction
+
+from ui.player_card import PlayerCard
+from ui.appbar import AppBar
+from events.event_bus import event_bus
 
 SETTINGS_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
+BAR_THICKNESS = 100
+
+
+class ClickableLabel(QLabel):
+    def __init__(self, text='', on_click=None):
+        super().__init__(text)
+        self._on_click = on_click
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._on_click:
+            self._on_click()
+
 
 class DesktopWidget(QMainWindow):
     def __init__(self, players=None):
         super().__init__()
-        # init icon 
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '..', 'assets', 'icon.ico')))
+        self.setWindowIcon(QIcon(
+            os.path.join(os.path.dirname(__file__), '..', 'assets', 'icon.ico')
+        ))
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -24,105 +41,209 @@ class DesktopWidget(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self._live_data_cache = {}
-        self._drag_start_global = QPoint()
-        self._drag_start_pos = QPoint()
-        self._dragging = False
         self._current_team_id = self._load_last_team_id()
+        self._current_matchup_idx = 0
+        self._current_matchup_data = {}
         self._team_cache = None
+        self._edge = self._load_edge()
 
-        self._load_position()
+        self._build_ui(players or [])
 
-        self.roster_view = RosterView(players or [])
-        self.setCentralWidget(self.roster_view)
-        self._resize_to_roster(len(players) if players else 0)
-        self._install_filter_recursive(self.roster_view)
+        self._appbar = None
+        QTimer.singleShot(100, self._register_appbar)
 
-        from ui.matchup_panel import MatchupPanel
-        self.matchup_panel = MatchupPanel()
+        event_bus.matchup_updated.connect(self._on_matchup_updated)
 
-    def _install_filter_recursive(self, widget):
-        widget.installEventFilter(self)
-        for child in widget.findChildren(QWidget):
-            child.installEventFilter(self)
+    def _build_ui(self, players: list):
+        central = QWidget()
+        central.setStyleSheet("background-color: rgba(20, 20, 35, 220);")
+        self.setCentralWidget(central)
 
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.MouseButtonPress:
-            if event.button() == Qt.MouseButton.LeftButton:
-                self._drag_start_global = event.globalPosition().toPoint()
-                self._drag_start_pos = self.pos()
-                self._dragging = True
-                return False
+        self._main_layout = QVBoxLayout(central)
+        self._main_layout.setContentsMargins(0, 0, 0, 0)
+        self._main_layout.setSpacing(0)
 
-        elif event.type() == QEvent.Type.MouseMove:
-            if self._dragging and event.buttons() == Qt.MouseButton.LeftButton:
-                delta = event.globalPosition().toPoint() - self._drag_start_global
-                if delta.manhattanLength() > 3:
-                    self.move(self._drag_start_pos + delta)
-                return False
+        # Score chip at top
+        self._score_widget = QWidget()
+        self._score_widget.setFixedHeight(110)
+        self._score_widget.setStyleSheet(
+            "background-color: rgba(30, 30, 50, 240); border: none;"
+        )
+        score_layout = QVBoxLayout(self._score_widget)
+        score_layout.setContentsMargins(8, 8, 8, 8)
+        score_layout.setSpacing(2)
 
-        elif event.type() == QEvent.Type.MouseButtonRelease:
-            if event.button() == Qt.MouseButton.LeftButton:
-                if self._dragging:
-                    self._dragging = False
-                    self._save_position()
-                return False
+        self._team_name_label = ClickableLabel("—", on_click=self._click_my_team)
+        self._team_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._team_name_label.setStyleSheet(
+            "color: #89b4fa; font-size: 11px; font-weight: bold;"
+        )
+        self._team_name_label.setWordWrap(True)
 
-        return super().eventFilter(obj, event)
+        self._my_score_label = ClickableLabel("—", on_click=self._click_my_team)
+        self._my_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._my_score_label.setStyleSheet(
+            "color: #cdd6f4; font-size: 18px; font-weight: bold;"
+        )
 
-    def _resize_to_roster(self, count: int):
-        width = max(400, count * 90 + 20)
-        self.setFixedSize(width, 140)
+        self._opp_score_label = ClickableLabel("—", on_click=self._click_opp_team)
+        self._opp_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._opp_score_label.setStyleSheet("color: #6c7086; font-size: 18px;")
 
-    def _load_position(self):
+        self._opp_name_label = ClickableLabel("—", on_click=self._click_opp_team)
+        self._opp_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._opp_name_label.setStyleSheet("color: #6c7086; font-size: 11px;")
+        self._opp_name_label.setWordWrap(True)
+
+        score_layout.addWidget(self._team_name_label)
+        score_layout.addWidget(self._my_score_label)
+        score_layout.addWidget(self._opp_score_label)
+        score_layout.addWidget(self._opp_name_label)
+
+        self._main_layout.addWidget(self._score_widget)
+
+        # Scrollable player column
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet("""
+            QScrollArea { border: none; background: transparent; }
+            QScrollBar:vertical {
+                background: rgba(30,30,50,100);
+                width: 4px;
+                border-radius: 2px;
+            }
+            QScrollBar::handle:vertical {
+                background: #45475a;
+                border-radius: 2px;
+                min-height: 20px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+        """)
+
+        self._players_widget = QWidget()
+        self._players_widget.setStyleSheet("background: transparent;")
+        self._players_layout = QVBoxLayout(self._players_widget)
+        self._players_layout.setContentsMargins(0, 4, 0, 4)
+        self._players_layout.setSpacing(2)
+        self._players_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        scroll.setWidget(self._players_widget)
+        self._main_layout.addWidget(scroll)
+
+        self._cards: dict[int, PlayerCard] = {}
+
+        from ui.roster_view_shim import RosterViewShim
+        self.roster_view = RosterViewShim(self._cards)
+
+        self._build_player_rows(players)
+
+    def _build_player_rows(self, players: list):
+        for i in reversed(range(self._players_layout.count())):
+            w = self._players_layout.itemAt(i).widget()
+            if w:
+                w.setParent(None)
+        self._cards.clear()
+
+        for player in players:
+            row = self._make_player_row(player)
+            self._players_layout.addWidget(row)
+
+    def _make_player_row(self, player) -> QWidget:
+        row = QWidget()
+        row.setFixedHeight(BAR_THICKNESS)
+        row.setStyleSheet("""
+            QWidget { background: transparent; border: none; }
+            QWidget:hover { background: rgba(49,50,68,120); }
+        """)
+
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        card = PlayerCard(
+            player_name=player.name,
+            position=player.position,
+            points=player.points_this_week,
+            nba_team=getattr(player, 'nba_team', '')
+        )
+        card.setFixedSize(BAR_THICKNESS, BAR_THICKNESS)
+        layout.addWidget(card)
+
+        self._cards[player.player_id] = card
+        return row
+
+    # ── AppBar ────────────────────────────────────────────────────────────────
+
+    def _register_appbar(self):
+        hwnd = int(self.winId())
+        screens = QApplication.screens()
         try:
             with open(SETTINGS_PATH) as f:
-                settings = json.load(f)
-            self.move(settings["window"]["x"], settings["window"]["y"])
+                idx = json.load(f).get('monitor', 0)
+            screen = screens[idx] if idx < len(screens) else screens[0]
         except Exception:
-            from PyQt6.QtWidgets import QApplication
-            screen = QApplication.primaryScreen().availableGeometry()
-            self.move(screen.x() + 100, screen.bottom() - 180)
+            screen = screens[0]
+        self._appbar = AppBar(hwnd, BAR_THICKNESS)
+        self._appbar.register(self._edge, screen=screen.geometry())
 
-    def _save_position(self):
-        try:
-            with open(SETTINGS_PATH) as f:
-                settings = json.load(f)
-            settings["window"]["x"] = self.x()
-            settings["window"]["y"] = self.y()
-            with open(SETTINGS_PATH, 'w') as f:
-                json.dump(settings, f, indent=2)
-        except Exception as e:
-            print(f"Could not save position: {e}")
+    def _set_edge(self, edge: str):
+        self._edge = edge
+        self._save_edge(edge)
+        if self._appbar:
+            self._appbar.set_edge(edge)
 
-    def _load_last_team_id(self) -> int:
-        try:
-            with open(SETTINGS_PATH) as f:
-                settings = json.load(f)
-            return settings["espn"].get("last_viewed_team_id", 1)
-        except Exception:
-            return 1
+    # ── Scoreboard ────────────────────────────────────────────────────────────
 
-    def _save_last_team_id(self, team_id: int):
-        try:
-            with open(SETTINGS_PATH) as f:
-                settings = json.load(f)
-            settings["espn"]["last_viewed_team_id"] = team_id
-            with open(SETTINGS_PATH, 'w') as f:
-                json.dump(settings, f, indent=2)
-        except Exception as e:
-            print(f"Could not save team id: {e}")
+    def _on_matchup_updated(self, data: dict):
+        if not data:
+            self._team_name_label.setText("—")
+            self._my_score_label.setText("—")
+            self._opp_score_label.setText("—")
+            self._opp_name_label.setText("BYE")
+            self._current_matchup_data = {}
+            return
+
+        self._current_matchup_data = data
+        my_team   = data.get('my_team',   '—')
+        my_score  = data.get('my_score',  0.0)
+        opp_score = data.get('opp_score', 0.0)
+        opp_name  = data.get('opp_team',  '?')
+        winning   = my_score >= opp_score
+
+        self._team_name_label.setText(my_team)
+        self._my_score_label.setText(f"{my_score:.1f}")
+        self._my_score_label.setStyleSheet(
+            f"color: {'#a6e3a1' if winning else '#f38ba8'}; "
+            "font-size: 18px; font-weight: bold;"
+        )
+        self._opp_score_label.setText(f"{opp_score:.1f}")
+        self._opp_name_label.setText(opp_name)
+
+    def _click_my_team(self):
+        team_id = self._current_matchup_data.get('my_team_id')
+        if team_id:
+            self._switch_to_team(team_id)
+
+    def _click_opp_team(self):
+        team_id = self._current_matchup_data.get('opp_team_id')
+        if team_id:
+            self._switch_to_team(team_id)
+
+    # ── Team / Matchup cycling ────────────────────────────────────────────────
 
     def set_team_cache(self, cache):
         self._team_cache = cache
-        self.matchup_panel.show_panel(self)
-        self.matchup_panel._team_cycle_cb = self._cycle_team
+        for i in range(cache.matchup_count()):
+            m = cache.get_matchup(i)
+            if m.get('my_team_id') == self._current_team_id or \
+               m.get('opp_team_id') == self._current_team_id:
+                self._current_matchup_idx = i
+                break
+        matchup = cache.get_matchup(self._current_matchup_idx)
+        event_bus.matchup_updated.emit(matchup)
         self._switch_to_team(self._current_team_id)
-
-    def _cycle_team(self, direction: str):
-        if direction == 'prev':
-            self._prev_team()
-        else:
-            self._next_team()
 
     def _switch_to_team(self, team_id: int):
         if not self._team_cache:
@@ -132,47 +253,33 @@ class DesktopWidget(QMainWindow):
             return
 
         self._current_team_id = team_id
-        self.roster_view._starter_players = data['snapshot']
-        self.roster_view._full_players = data.get('full_snapshot', data['snapshot'])
-        self.roster_view.refresh_roster(data['snapshot'])
-        self._resize_to_roster(len(data['snapshot']))
-        self._install_filter_recursive(self.roster_view)
+        players = data['snapshot']
+        self._build_player_rows(players)
 
-
-        for player in data['snapshot']:
-            card = self.roster_view.get_card(player.player_id)
+        for player in players:
+            card = self._cards.get(player.player_id)
             if card:
                 card.set_season_avg(player.projected_points)
                 if player.name in self._live_data_cache:
                     card.set_live_data(self._live_data_cache[player.name])
-                    
-        def _apply_live_to_card(card, name):
-            if name in self._live_data_cache:
-                card.set_live_data(self._live_data_cache[name])
 
-        self.roster_view._live_data_applier = _apply_live_to_card
-
-        event_bus.matchup_updated.emit(data['matchup'])
         self._save_last_team_id(team_id)
 
-    def _prev_team(self):
-        if self._team_cache:
-            self._switch_to_team(self._team_cache.prev_team_id(self._current_team_id))
+    def _cycle_matchup(self, direction: str):
+        if not self._team_cache:
+            return
+        count = self._team_cache.matchup_count()
+        if count == 0:
+            return
+        if direction == 'next':
+            self._current_matchup_idx = (self._current_matchup_idx + 1) % count
+        else:
+            self._current_matchup_idx = (self._current_matchup_idx - 1) % count
 
-    def _next_team(self):
-        if self._team_cache:
-            self._switch_to_team(self._team_cache.next_team_id(self._current_team_id))
+        matchup = self._team_cache.get_matchup(self._current_matchup_idx)
+        event_bus.matchup_updated.emit(matchup)
 
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        if hasattr(self, 'matchup_panel'):
-            self.matchup_panel.update_position(self)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        painter.end()
+    # ── Context menu ──────────────────────────────────────────────────────────
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
@@ -185,38 +292,38 @@ class DesktopWidget(QMainWindow):
                 padding: 4px;
                 font-size: 12px;
             }
-            QMenu::item {
-                padding: 6px 20px;
-                border-radius: 4px;
-            }
-            QMenu::item:selected {
-                background-color: #313244;
-            }
-            QMenu::separator {
-                height: 1px;
-                background: #45475a;
-                margin: 4px 8px;
-            }
+            QMenu::item { padding: 6px 20px; border-radius: 4px; }
+            QMenu::item:selected { background-color: #313244; }
+            QMenu::separator { height: 1px; background: #45475a; margin: 4px 8px; }
         """)
 
-        ## Toggling between menu modes ##
-        mode_menu = menu.addMenu("Display Mode")
-        mode_menu.setStyleSheet(menu.styleSheet())
+        prev_action = QAction("◀ Previous Matchup", self)
+        prev_action.triggered.connect(lambda: self._cycle_matchup('prev'))
+        menu.addAction(prev_action)
 
-        for label, mode in [("Single Player", "SINGLE"),
-                            ("Starters", "STARTERS"),
-                            ("Full Roster", "FULL")]:
-            action = QAction(label, self)
-            action.setCheckable(True)
-            action.setChecked(self.roster_view._mode == mode)
-            action.triggered.connect(lambda checked, m=mode: self._set_display_mode(m))
-            mode_menu.addAction(action)
+        next_action = QAction("▶ Next Matchup", self)
+        next_action.triggered.connect(lambda: self._cycle_matchup('next'))
+        menu.addAction(next_action)
+
+        menu.addSeparator()
+
+        edge_menu = menu.addMenu("Dock Edge")
+        edge_menu.setStyleSheet(menu.styleSheet())
+        for label, edge in [("Left", "left"), ("Right", "right"),
+                              ("Top", "top"), ("Bottom", "bottom")]:
+            a = QAction(label, self)
+            a.setCheckable(True)
+            a.setChecked(self._edge == edge)
+            a.triggered.connect(lambda checked, e=edge: self._set_edge(e))
+            edge_menu.addAction(a)
+
+        self._get_screen_menu(menu)
+
+        menu.addSeparator()
 
         open_action = QAction("Open League in Browser", self)
         open_action.triggered.connect(self._open_league)
         menu.addAction(open_action)
-
-        menu.addSeparator()
 
         refresh_action = QAction("Refresh", self)
         refresh_action.triggered.connect(self._request_refresh)
@@ -234,12 +341,51 @@ class DesktopWidget(QMainWindow):
 
         menu.exec(event.globalPos())
 
+    def _get_screen_menu(self, menu):
+        screen_menu = menu.addMenu("Move to Monitor")
+        screen_menu.setStyleSheet(menu.styleSheet())
+        screens = QApplication.screens()
+        current_screen = QApplication.screenAt(self.pos())
+        for i, screen in enumerate(screens):
+            geo = screen.geometry()
+            label = f"Monitor {i+1} ({geo.width()}x{geo.height()})"
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(screen == current_screen)
+            action.triggered.connect(lambda checked, s=screen: self._move_to_screen(s))
+            screen_menu.addAction(action)
+
+    def _move_to_screen(self, screen):
+        if self._appbar:
+            self._appbar.unregister()
+        screens = QApplication.screens()
+        idx = screens.index(screen)
+        self._save_setting('monitor', idx)
+        QTimer.singleShot(100, lambda: self._register_appbar_on_screen(screen))
+
+    def _register_appbar_on_screen(self, screen):
+        hwnd = int(self.winId())
+        self._appbar = AppBar(hwnd, BAR_THICKNESS)
+        self._appbar.register(self._edge, screen=screen.geometry())
+
+    def _save_setting(self, key, value):
+        try:
+            with open(SETTINGS_PATH) as f:
+                s = json.load(f)
+            s[key] = value
+            with open(SETTINGS_PATH, 'w') as f:
+                json.dump(s, f, indent=2)
+        except Exception:
+            pass
+
+    # ── Misc ──────────────────────────────────────────────────────────────────
+
     def _open_league(self):
         try:
             with open(SETTINGS_PATH) as f:
-                settings = json.load(f)
-            league_id = settings["espn"]["league_id"]
-            webbrowser.open(f"https://fantasy.espn.com/basketball/league?leagueId={league_id}")
+                s = json.load(f)
+            lid = s['espn']['league_id']
+            webbrowser.open(f"https://fantasy.espn.com/basketball/league?leagueId={lid}")
         except Exception:
             webbrowser.open("https://fantasy.espn.com")
 
@@ -249,51 +395,70 @@ class DesktopWidget(QMainWindow):
     def _open_settings(self):
         from ui.setup_dialog import SetupDialog
         dialog = SetupDialog(self)
-        if dialog.exec() == SetupDialog.DialogCode.Accepted:
+        if dialog.exec():
             event_bus.force_refresh.emit()
             self._reload_roster()
 
-    def _reload_roster(self):
-        try:
-            new_client = ESPNClient()
-            new_client.connect()
-            all_teams_data = new_client.get_all_teams_data()
-            new_team_cache = TeamCache(all_teams_data)
-
-            self.espn_client = new_client
-            self.team_cache = new_team_cache
-            self._team_cache = new_team_cache
-            self.poller.client = new_client
-
-            all_roster_names = []
-            for tid in new_team_cache.all_team_ids:
-                td = new_team_cache.get_team(tid)
-                all_roster_names.extend([p.name for p in td.get('snapshot', [])])
-            all_roster_names = list(set(all_roster_names))
-            self.live_poller.update_roster_names(all_roster_names)
-            self.live_poller.client.scoring = new_client.get_scoring_settings()
-
-            self._switch_to_team(self._current_team_id)
-            event_bus.force_refresh.emit()
-            print(f"[Settings] Reloaded — {len(all_teams_data)} teams, {len(all_roster_names)} players tracked")
-
-        except Exception as e:
-            print(f"[Settings] Reload failed: {e}")
-
-    def _set_display_mode(self, mode: str):
-        self.roster_view.set_mode(mode)
-        players = self.roster_view._full_players if mode == 'FULL' else self.roster_view._starter_players
-        count = len(players)
-        if mode == 'SINGLE':
-            count = 1
-        self._resize_to_roster(count)
-        self._install_filter_recursive(self.roster_view)
-        # Reapply live data
-        for name, data in self._live_data_cache.items():
-            for card in self.roster_view._cards.values():
-                if card.player_name == name or card.player_name in name:
-                    card.set_live_data(data)
-
     def _quit(self):
-        from PyQt6.QtWidgets import QApplication
+        if self._appbar:
+            self._appbar.unregister()
         QApplication.quit()
+
+    def closeEvent(self, event):
+        if self._appbar:
+            self._appbar.unregister()
+        super().closeEvent(event)
+
+    def _reload_roster(self):
+        from api.espn_client import ESPNClient
+        from api.team_cache import TeamCache
+        try:
+            client = ESPNClient()
+            client.connect()
+            all_teams_data = client.get_all_teams_data()
+            self._team_cache = TeamCache(all_teams_data)
+            self._switch_to_team(self._current_team_id)
+            if hasattr(self, 'live_poller'):
+                names = []
+                for tid in self._team_cache.all_team_ids:
+                    td = self._team_cache.get_team(tid)
+                    names.extend([p.name for p in td.get('snapshot', [])])
+                self.live_poller.update_roster_names(list(set(names)))
+        except Exception as e:
+            print(f"[DesktopWidget] Reload failed: {e}")
+
+    # ── Settings persistence ──────────────────────────────────────────────────
+
+    def _load_last_team_id(self) -> int:
+        try:
+            with open(SETTINGS_PATH) as f:
+                return json.load(f)['espn'].get('last_viewed_team_id', 1)
+        except Exception:
+            return 1
+
+    def _save_last_team_id(self, team_id: int):
+        try:
+            with open(SETTINGS_PATH) as f:
+                s = json.load(f)
+            s['espn']['last_viewed_team_id'] = team_id
+            with open(SETTINGS_PATH, 'w') as f:
+                json.dump(s, f, indent=2)
+        except Exception:
+            pass
+
+    def _load_edge(self) -> str:
+        try:
+            with open(SETTINGS_PATH) as f:
+                return json.load(f).get('dock_edge', 'right')
+        except Exception:
+            return 'right'
+
+    def _save_edge(self, edge: str):
+        try:
+            with open(SETTINGS_PATH) as f:
+                s = json.load(f)
+            s['dock_edge'] = edge
+            with open(SETTINGS_PATH, 'w') as f:
+                json.dump(s, f, indent=2)
+        except Exception:
+            pass
