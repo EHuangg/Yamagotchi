@@ -119,25 +119,36 @@ class AnimationTrigger:
     def _handle_live_stats(self, stats: dict):
         for player_id, card in self.roster_view._cards.items():
             name = card.player_name
-            if name in stats:
-                card.set_live_data(stats[name])
+            if name not in stats:
+                continue
 
-                new_fpts = stats[name].get('fantasy_pts', 0.0)
-                old_fpts = getattr(card, '_last_fpts', 0.0)
-                delta = new_fpts - old_fpts
+            card.set_live_data(stats[name])
+            data = stats[name]
 
-                new_fgm = stats[name].get('FGM', 0)
-                old_fgm = getattr(card, '_last_fgm', 0)
+            new_fpts = data.get('fantasy_pts', 0.0)
+            old_fpts = getattr(card, '_last_fpts', 0.0)
+            delta    = new_fpts - old_fpts
 
-                if delta > 0:
-                    # Field goal detected — play madeShot animation
-                    if new_fgm > old_fgm:
-                        card.animate('madeShot')
-                        self._handle('BIG_GAME' if delta >= 8 else 'POINTS_SCORED',
-                                    player_id, delta)
-                    else:
-                        # Points scored but no new FGM — likely free throws, no animation
-                        self._handle('POINTS_SCORED', player_id, delta)
+            new_fgm  = data.get('FGM', 0)
+            old_fgm  = getattr(card, '_last_fgm', 0)
+            new_fga  = data.get('FGA', 0)
+            old_fga  = getattr(card, '_last_fga', 0)
+            new_blk  = data.get('BLK', 0)
+            old_blk  = getattr(card, '_last_blk', 0)
 
-                card._last_fpts = new_fpts
-                card._last_fgm  = new_fgm
+            # Animations — priority: block > madeShot > missedShot
+            if new_blk > old_blk:
+                card.animate('block')
+            elif new_fgm > old_fgm:
+                card.animate('madeShot')
+            elif new_fga > old_fga:
+                card.animate('missedShot')
+
+            # Floating text + points
+            if delta > 0:
+                self._handle('BIG_GAME' if delta >= 8 else 'POINTS_SCORED', player_id, delta)
+
+            card._last_fpts = new_fpts
+            card._last_fgm  = new_fgm
+            card._last_fga  = new_fga
+            card._last_blk  = new_blk

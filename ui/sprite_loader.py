@@ -9,6 +9,10 @@ def _clean_player_name(name: str) -> str:
 
 SPRITE_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites')
 MADE_SHOT_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites', 'madeShot')
+BLOCK_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites', 'block', 'body')
+MISSED_SHOT_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites', 'missedShot')
+
+
 FRAME_SIZE   = 16
 DISPLAY_SIZE = 64
 
@@ -41,6 +45,14 @@ class SpriteLoader:
         self._made_jersey_frames: dict[str, list[QPixmap]] = {}
         self._made_composited: dict[str, list[QPixmap]] = {}
         self._made_ball_frames: list[QPixmap] = []
+        
+        # missedShot layers
+        self._missed_shot_frames: list[QPixmap] = []
+        
+        # block layers
+        self._block_frames: dict[str, list[QPixmap]] = {}
+        
+        
 
         self._animations: dict = {}
         self._loaded = False
@@ -48,6 +60,8 @@ class SpriteLoader:
     def ensure_loaded(self):
         if self._loaded:
             return
+        # debugging
+        print(f"[SpriteLoader] Block frames loaded: {list(self._block_frames.keys())}")
 
         anim_path = os.path.join(SPRITE_DIR, 'animations.json')
         try:
@@ -102,14 +116,37 @@ class SpriteLoader:
                 )
                 print(f"[SpriteLoader] Loaded madeShot jersey: {key} ({len(self._made_jersey_frames[key])} frames)")
 
-        # Load ball
+        # Load madeShot ball
         ball_path = os.path.join(MADE_SHOT_DIR, 'ball.png')
         if os.path.exists(ball_path):
             self._made_ball_frames = self._slice_sheet(ball_path)
             print(f"[SpriteLoader] Loaded madeShot ball ({len(self._made_ball_frames)} frames)")
 
-        self._loaded = True
+        # Load missedShot frames
+        missed_path = os.path.join(MISSED_SHOT_DIR, 'missedShot.png')
+        if os.path.exists(missed_path):
+            self._missed_shot_frames = self._slice_sheet(missed_path)
+            print(f"[SpriteLoader] Loaded missedShot ({len(self._missed_shot_frames)} frames)")
+        else:
+            print(f"[SpriteLoader] missedShot not found: {missed_path}")
 
+
+        # Load block
+        self._block_frames = {}
+        print(f"[SpriteLoader] BLOCK_DIR: {BLOCK_DIR}, exists: {os.path.exists(BLOCK_DIR)}")
+        if os.path.exists(BLOCK_DIR):
+            for filename in os.listdir(BLOCK_DIR):
+                if not filename.endswith('.png'):
+                    continue
+                key = filename.replace('.png', '')
+                self._block_frames[key] = self._slice_sheet(os.path.join(BLOCK_DIR, filename))
+                print(f"[SpriteLoader] Loaded block: {key}")
+        else:
+            print(f"[SpriteLoader] Block dir not found: {BLOCK_DIR}")
+
+        ## place all animation loading above this line
+        self._loaded = True
+        
     def _slice_sheet(self, path: str) -> list[QPixmap]:
         sheet = QPixmap(path)
         if sheet.isNull():
@@ -191,6 +228,19 @@ class SpriteLoader:
             body_frames, jersey_frames, self._made_ball_frames
         )
         return self._made_composited[cache_key]
+    
+    def get_missed_shot_frames(self) -> list[QPixmap]:
+        return self._missed_shot_frames
+    
+    def get_block_frames(self, player_name: str) -> list[QPixmap]:
+        clean_name = _clean_player_name(player_name)
+        skin, hair = PLAYER_SKIN_MAP.get(clean_name, (DEFAULT_SKIN, DEFAULT_HAIR))
+        key = f"block_{skin}"
+        print(f"[SpriteLoader] Looking for block key: '{key}', available: {list(self._block_frames.keys())}")
+        frames = self._block_frames.get(key, [])
+        if not frames:
+            frames = self._block_frames.get("block_dark", [])
+        return frames
 
     def get_animation(self, name: str) -> dict:
         return self._animations.get(name, {"frames": [0,1,2,3,4,5], "fps": 3})

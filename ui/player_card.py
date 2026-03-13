@@ -136,11 +136,15 @@ class PlayerCard(QWidget):
         fps = anim.get("fps", 8)
         self._idle_timer.stop()
 
-        # Pre-load the right frames for this animation
         if animation_name == 'madeShot':
             self._anim_pixmaps = sprite_loader.get_made_shot_frames(
                 self.player_name, self._jersey
             )
+        elif animation_name == 'missedShot':
+            self._anim_pixmaps = sprite_loader.get_missed_shot_frames()
+            
+        elif animation_name == 'block':
+            self._anim_pixmaps = sprite_loader.get_block_frames(self.player_name)
         else:
             self._anim_pixmaps = []
 
