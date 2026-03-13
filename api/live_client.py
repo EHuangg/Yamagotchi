@@ -66,12 +66,12 @@ class LiveClient:
                             parts = key.split('-')
                             made_key      = parts[0]  # e.g. fieldGoalsMade
                             attempted_key = parts[1]  # e.g. fieldGoalsAttempted
-                            if isinstance(val, str) and '-' in str(val):
-                                made, attempted = str(val).split('-')
+                            if isinstance(val, str) and '-' in val:
                                 try:
+                                    made, attempted = val.split('-')
                                     raw[made_key]      = float(made)
                                     raw[attempted_key] = float(attempted)
-                                except ValueError:
+                                except (ValueError, IndexError):
                                     raw[made_key]      = 0.0
                                     raw[attempted_key] = 0.0
                             else:

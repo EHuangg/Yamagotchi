@@ -45,7 +45,8 @@ def build_snapshot(roster, starters_only: bool = True) -> List[PlayerState]:
         try:
             total_stats = (player.stats or {}).get(f'{SEASON_YEAR}_total', {})
             season_avg = float(total_stats.get('applied_avg', 0.0))
-        except Exception:
+        except Exception as e:
+            print(f"[EventParser] Failed to get season avg: {e}")
             season_avg = 0.0
 
         snapshot.append(PlayerState(

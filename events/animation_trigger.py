@@ -117,13 +117,18 @@ class AnimationTrigger:
                 card.set_game_finished(player.points_this_week)
     
     def _handle_live_stats(self, stats: dict):
-        for player_id, card in self.roster_view._cards.items():
-            name = card.player_name
-            if name not in stats:
+        # Build name→(player_id, card) map to avoid repeated lookups
+        name_to_card_info = {
+            card.player_name: (player_id, card) 
+            for player_id, card in self.roster_view._cards.items()
+        }
+        
+        for name, data in stats.items():
+            if name not in name_to_card_info:
                 continue
-
-            card.set_live_data(stats[name])
-            data = stats[name]
+            
+            player_id, card = name_to_card_info[name]
+            card.set_live_data(data)
 
             new_fpts = data.get('fantasy_pts', 0.0)
             old_fpts = getattr(card, '_last_fpts', 0.0)

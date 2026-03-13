@@ -1,8 +1,6 @@
 from espn_api.basketball import League
 import json
-import os
-
-SETTINGS_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
+from config_utils import SETTINGS_PATH
 
 class ESPNClient:
     def __init__(self):

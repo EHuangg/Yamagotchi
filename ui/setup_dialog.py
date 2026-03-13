@@ -1,5 +1,4 @@
 import json
-import os
 import webbrowser
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
@@ -7,8 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-
-SETTINGS_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
+from config_utils import SETTINGS_PATH
 
 COOKIE_HELP_URL = "https://github.com/cwendt94/espn-api/discussions/150"
 
@@ -110,8 +108,8 @@ class SetupDialog(QDialog):
                 self._espn_s2.setText(cfg["espn_s2"])
             if cfg.get("swid"):
                 self._swid.setText(cfg["swid"])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[SetupDialog] Failed to load existing settings: {e}")
 
     def _save(self):
         league_id = self._league_id.text().strip()
@@ -177,8 +175,8 @@ def check_and_run_setup():
         ])
         if has_creds:
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Setup] Failed to check credentials: {e}")
 
     # Show setup dialog
     dialog = SetupDialog()

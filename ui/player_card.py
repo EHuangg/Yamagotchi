@@ -14,6 +14,7 @@ class PlayerCard(QWidget):
     def __init__(self, player_name: str, position: str, points: float = 0.0, nba_team: str = ""):
         super().__init__()
         self.player_name = _clean_player_name(player_name)
+        self._short_name = self.player_name.split()[-1]  # Cache short name to avoid repeated splits
 
         self.position = position
         self.points = points
@@ -84,8 +85,7 @@ class PlayerCard(QWidget):
         self._sprite_label.setStyleSheet("background: transparent;")
 
         # Player name
-        short_name = self.player_name.split(" ")[-1]
-        self._name_label = QLabel(short_name)
+        self._name_label = QLabel(self._short_name)
         self._name_label.setFont(self._pixel_font)
         self._name_label.setStyleSheet("color: white; background: transparent;")
         self._name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -264,27 +264,27 @@ class PlayerCard(QWidget):
             if fpts is None or status == '':
                 self._points_label.setStyleSheet("color: #555555; background: transparent;")
                 self._points_label.setText("—")
-                self._name_label.setText(self.player_name.split()[-1])
+                self._name_label.setText(self._short_name)
             elif status in ACTIVE_STATUSES:
                 self._points_label.setStyleSheet("color: #a6e3a1; background: transparent;")
                 self._points_label.setText(f"{fpts:.1f}")
                 self._name_label.setText(
-                    self.player_name.split()[-1] if status == 'STATUS_IN_PROGRESS'
-                    else self.player_name.split()[-1] + " ⏸"
+                    self._short_name if status == 'STATUS_IN_PROGRESS'
+                    else self._short_name + " ⏸"
                 )
             elif status == 'STATUS_FINAL':
                 self._points_label.setStyleSheet("color: #FFD700; background: transparent;")
                 self._points_label.setText(f"{fpts:.1f}")
-                self._name_label.setText(self.player_name.split()[-1])
+                self._name_label.setText(self._short_name)
             else:
                 self._points_label.setStyleSheet("color: #555555; background: transparent;")
                 self._points_label.setText("—")
-                self._name_label.setText(self.player_name.split()[-1])
+                self._name_label.setText(self._short_name)
                 
         elif mode == 'AVERAGES':
             self._points_label.setStyleSheet("color: #89b4fa; background: transparent;")
             self._points_label.setText(f"{self._season_avg:.1f} avg")
-            self._name_label.setText(self.player_name.split()[-1])
+            self._name_label.setText(self._short_name)
 
         elif mode == 'STATLINE':
             pts = self._today_stats.get('PTS', 0)
@@ -293,4 +293,4 @@ class PlayerCard(QWidget):
             pf  = self._today_stats.get('PF',  0)
             self._points_label.setStyleSheet("color: #cdd6f4; background: transparent;")
             self._points_label.setText(f"{int(pts)}/{int(reb)}/{int(ast)}/{int(pf)}")
-            self._name_label.setText(self.player_name.split()[-1])
+            self._name_label.setText(self._short_name)

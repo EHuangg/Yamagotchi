@@ -10,9 +10,8 @@ from PyQt6.QtGui import QIcon, QAction
 
 from ui.player_card import PlayerCard
 from ui.appbar import AppBar
+from config_utils import SETTINGS_PATH
 from events.event_bus import event_bus
-
-SETTINGS_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
 BAR_THICKNESS = 100
 
 
@@ -183,7 +182,8 @@ class DesktopWidget(QMainWindow):
             with open(SETTINGS_PATH) as f:
                 idx = json.load(f).get('monitor', 0)
             screen = screens[idx] if idx < len(screens) else screens[0]
-        except Exception:
+        except Exception as e:
+            print(f"[DesktopWidget] Failed to load monitor index: {e}")
             screen = screens[0]
         self._appbar = AppBar(hwnd, BAR_THICKNESS)
         self._appbar.register(self._edge, screen=screen.geometry())
@@ -205,7 +205,9 @@ class DesktopWidget(QMainWindow):
             self._current_matchup_data = {}
             return
 
+        # Store all data fields including team IDs so buttons work
         self._current_matchup_data = data
+        
         my_team   = data.get('my_team',   '—')
         my_score  = data.get('my_score',  0.0)
         opp_score = data.get('opp_score', 0.0)
@@ -242,6 +244,11 @@ class DesktopWidget(QMainWindow):
                 self._current_matchup_idx = i
                 break
         matchup = cache.get_matchup(self._current_matchup_idx)
+        # Populate _current_matchup_data immediately so scoreboard buttons work
+        # Ensure team_id keys are present
+        if matchup and 'my_team_id' not in matchup:
+            matchup['my_team_id'] = self._current_team_id
+        self._current_matchup_data = matchup or {}
         event_bus.matchup_updated.emit(matchup)
         self._switch_to_team(self._current_team_id)
 
@@ -254,7 +261,23 @@ class DesktopWidget(QMainWindow):
 
         self._current_team_id = team_id
         players = data['snapshot']
-        self._build_player_rows(players)
+        
+        # Optimize: check if roster has actually changed before full rebuild
+        old_player_ids = set(self._cards.keys())
+        new_player_ids = set(p.player_id for p in players)
+        
+        if old_player_ids != new_player_ids:
+            # Roster changed - rebuild
+            self._build_player_rows(players)
+        else:
+            # Roster same - just update existing cards
+            for player in players:
+                card = self._cards.get(player.player_id)
+                if card:
+                    card.set_season_avg(player.projected_points)
+                    if player.name in self._live_data_cache:
+                        card.set_live_data(self._live_data_cache[player.name])
+            return
 
         for player in players:
             card = self._cards.get(player.player_id)
@@ -277,6 +300,12 @@ class DesktopWidget(QMainWindow):
             self._current_matchup_idx = (self._current_matchup_idx - 1) % count
 
         matchup = self._team_cache.get_matchup(self._current_matchup_idx)
+        
+        # Switch to the my_team from this matchup
+        my_team_id = matchup.get('my_team_id')
+        if my_team_id:
+            self._switch_to_team(my_team_id)
+        
         event_bus.matchup_updated.emit(matchup)
 
     # ── Context menu ──────────────────────────────────────────────────────────
@@ -375,8 +404,8 @@ class DesktopWidget(QMainWindow):
             s[key] = value
             with open(SETTINGS_PATH, 'w') as f:
                 json.dump(s, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[DesktopWidget] Failed to save setting {key}: {e}")
 
     # ── Misc ──────────────────────────────────────────────────────────────────
 
@@ -386,7 +415,8 @@ class DesktopWidget(QMainWindow):
                 s = json.load(f)
             lid = s['espn']['league_id']
             webbrowser.open(f"https://fantasy.espn.com/basketball/league?leagueId={lid}")
-        except Exception:
+        except Exception as e:
+            print(f"[DesktopWidget] Failed to open league URL: {e}")
             webbrowser.open("https://fantasy.espn.com")
 
     def _request_refresh(self):
@@ -433,7 +463,8 @@ class DesktopWidget(QMainWindow):
         try:
             with open(SETTINGS_PATH) as f:
                 return json.load(f)['espn'].get('last_viewed_team_id', 1)
-        except Exception:
+        except Exception as e:
+            print(f"[DesktopWidget] Failed to load last team ID: {e}")
             return 1
 
     def _save_last_team_id(self, team_id: int):
@@ -443,14 +474,15 @@ class DesktopWidget(QMainWindow):
             s['espn']['last_viewed_team_id'] = team_id
             with open(SETTINGS_PATH, 'w') as f:
                 json.dump(s, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[DesktopWidget] Failed to save last team ID: {e}")
 
     def _load_edge(self) -> str:
         try:
             with open(SETTINGS_PATH) as f:
                 return json.load(f).get('dock_edge', 'right')
-        except Exception:
+        except Exception as e:
+            print(f"[DesktopWidget] Failed to load dock edge: {e}")
             return 'right'
 
     def _save_edge(self, edge: str):
@@ -460,5 +492,5 @@ class DesktopWidget(QMainWindow):
             s['dock_edge'] = edge
             with open(SETTINGS_PATH, 'w') as f:
                 json.dump(s, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[DesktopWidget] Failed to save dock edge: {e}")

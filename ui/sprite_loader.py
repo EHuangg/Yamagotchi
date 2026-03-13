@@ -60,8 +60,6 @@ class SpriteLoader:
     def ensure_loaded(self):
         if self._loaded:
             return
-        # debugging
-        print(f"[SpriteLoader] Block frames loaded: {list(self._block_frames.keys())}")
 
         anim_path = os.path.join(SPRITE_DIR, 'animations.json')
         try:
@@ -73,76 +71,116 @@ class SpriteLoader:
 
         # Load idle body sheets
         idle_dir = os.path.join(SPRITE_DIR, 'idle')
+        idle_body_count = 0
+        idle_body_total = 0
         for filename in os.listdir(os.path.join(idle_dir, 'body')):
             if not filename.endswith('.png'):
                 continue
+            idle_body_total += 1
             key = filename.replace('.png', '')
-            self._body_frames[key] = self._slice_sheet(
-                os.path.join(idle_dir, 'body', filename)
-            )
-            print(f"[SpriteLoader] Loaded idle body: {key} ({len(self._body_frames[key])} frames)")
+            frames = self._slice_sheet(os.path.join(idle_dir, 'body', filename))
+            if frames:
+                self._body_frames[key] = frames
+                idle_body_count += 1
+            else:
+                print(f"[SpriteLoader] Failed to load idle body: {key}")
+        print(f"[SpriteLoader] Idle body: {idle_body_count}/{idle_body_total} loaded")
 
         # Load idle jersey sheets
+        idle_jersey_count = 0
+        idle_jersey_total = 0
         for filename in os.listdir(os.path.join(idle_dir, 'jerseys')):
             if not filename.endswith('.png'):
                 continue
+            idle_jersey_total += 1
             key = filename.replace('.png', '')
-            self._jersey_frames[key] = self._slice_sheet(
-                os.path.join(idle_dir, 'jerseys', filename)
-            )
-            print(f"[SpriteLoader] Loaded idle jersey: {key} ({len(self._jersey_frames[key])} frames)")
+            frames = self._slice_sheet(os.path.join(idle_dir, 'jerseys', filename))
+            if frames:
+                self._jersey_frames[key] = frames
+                idle_jersey_count += 1
+            else:
+                print(f"[SpriteLoader] Failed to load idle jersey: {key}")
+        print(f"[SpriteLoader] Idle jersey: {idle_jersey_count}/{idle_jersey_total} loaded")
 
         # Load madeShot body sheets
         made_body_dir = os.path.join(MADE_SHOT_DIR, 'body')
+        made_body_count = 0
+        made_body_total = 0
         if os.path.exists(made_body_dir):
             for filename in os.listdir(made_body_dir):
                 if not filename.endswith('.png'):
                     continue
+                made_body_total += 1
                 key = filename.replace('.png', '')
-                self._made_body_frames[key] = self._slice_sheet(
-                    os.path.join(made_body_dir, filename)
-                )
-                print(f"[SpriteLoader] Loaded madeShot body: {key} ({len(self._made_body_frames[key])} frames)")
+                frames = self._slice_sheet(os.path.join(made_body_dir, filename))
+                if frames:
+                    self._made_body_frames[key] = frames
+                    made_body_count += 1
+                else:
+                    print(f"[SpriteLoader] Failed to load madeShot body: {key}")
+            print(f"[SpriteLoader] MadeShot body: {made_body_count}/{made_body_total} loaded")
 
         # Load madeShot jersey sheets
         made_jersey_dir = os.path.join(MADE_SHOT_DIR, 'jerseys')
+        made_jersey_count = 0
+        made_jersey_total = 0
         if os.path.exists(made_jersey_dir):
             for filename in os.listdir(made_jersey_dir):
                 if not filename.endswith('.png'):
                     continue
+                made_jersey_total += 1
                 key = filename.replace('.png', '')
-                self._made_jersey_frames[key] = self._slice_sheet(
-                    os.path.join(made_jersey_dir, filename)
-                )
-                print(f"[SpriteLoader] Loaded madeShot jersey: {key} ({len(self._made_jersey_frames[key])} frames)")
+                frames = self._slice_sheet(os.path.join(made_jersey_dir, filename))
+                if frames:
+                    self._made_jersey_frames[key] = frames
+                    made_jersey_count += 1
+                else:
+                    print(f"[SpriteLoader] Failed to load madeShot jersey: {key}")
+            print(f"[SpriteLoader] MadeShot jersey: {made_jersey_count}/{made_jersey_total} loaded")
 
         # Load madeShot ball
         ball_path = os.path.join(MADE_SHOT_DIR, 'ball.png')
         if os.path.exists(ball_path):
-            self._made_ball_frames = self._slice_sheet(ball_path)
-            print(f"[SpriteLoader] Loaded madeShot ball ({len(self._made_ball_frames)} frames)")
+            frames = self._slice_sheet(ball_path)
+            if frames:
+                self._made_ball_frames = frames
+                print(f"[SpriteLoader] MadeShot ball: 1/1 loaded")
+            else:
+                print(f"[SpriteLoader] Failed to load madeShot ball")
+        else:
+            print(f"[SpriteLoader] MadeShot ball: 0/1 (file not found)")
 
         # Load missedShot frames
         missed_path = os.path.join(MISSED_SHOT_DIR, 'missedShot.png')
         if os.path.exists(missed_path):
-            self._missed_shot_frames = self._slice_sheet(missed_path)
-            print(f"[SpriteLoader] Loaded missedShot ({len(self._missed_shot_frames)} frames)")
+            frames = self._slice_sheet(missed_path)
+            if frames:
+                self._missed_shot_frames = frames
+                print(f"[SpriteLoader] MissedShot: 1/1 loaded")
+            else:
+                print(f"[SpriteLoader] Failed to load missedShot")
         else:
-            print(f"[SpriteLoader] missedShot not found: {missed_path}")
-
+            print(f"[SpriteLoader] MissedShot: 0/1 (file not found)")
 
         # Load block
         self._block_frames = {}
-        print(f"[SpriteLoader] BLOCK_DIR: {BLOCK_DIR}, exists: {os.path.exists(BLOCK_DIR)}")
+        block_count = 0
+        block_total = 0
         if os.path.exists(BLOCK_DIR):
             for filename in os.listdir(BLOCK_DIR):
                 if not filename.endswith('.png'):
                     continue
+                block_total += 1
                 key = filename.replace('.png', '')
-                self._block_frames[key] = self._slice_sheet(os.path.join(BLOCK_DIR, filename))
-                print(f"[SpriteLoader] Loaded block: {key}")
+                frames = self._slice_sheet(os.path.join(BLOCK_DIR, filename))
+                if frames:
+                    self._block_frames[key] = frames
+                    block_count += 1
+                else:
+                    print(f"[SpriteLoader] Failed to load block: {key}")
+            print(f"[SpriteLoader] Block: {block_count}/{block_total} loaded")
         else:
-            print(f"[SpriteLoader] Block dir not found: {BLOCK_DIR}")
+            print(f"[SpriteLoader] Block: 0/? (directory not found)")
 
         ## place all animation loading above this line
         self._loaded = True

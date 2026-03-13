@@ -1,13 +1,11 @@
 import json
-import os
 import webbrowser
 import requests
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QWidget
 )
 from PyQt6.QtCore import Qt, QTimer
-
-SETTINGS_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
+from config_utils import SETTINGS_PATH
 ESPN_FANTASY_URL = "https://www.espn.com/fantasy/basketball/"
 
 class LoginDialog(QDialog):
@@ -170,24 +168,27 @@ class LoginDialog(QDialog):
             swid = None
 
             for name, encrypted_value in cur.fetchall():
+                value = None
                 try:
                     # Chrome v80+ AES-256-GCM encryption
                     iv = encrypted_value[3:15]
                     payload = encrypted_value[15:]
                     cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
                     value = cipher.decrypt(payload)[:-16].decode('utf-8')
-                except Exception:
+                except Exception as e1:
                     try:
                         value = win32crypt.CryptUnprotectData(
                             encrypted_value, None, None, None, 0
                         )[1].decode('utf-8')
-                    except Exception:
+                    except Exception as e2:
+                        print(f"[Login] Failed to decrypt: {e1}, {e2}")
                         continue
 
-                if name == 'espn_s2':
-                    espn_s2 = value
-                elif name == 'SWID':
-                    swid = value
+                if value:
+                    if name == 'espn_s2':
+                        espn_s2 = value
+                    elif name == 'SWID':
+                        swid = value
 
             conn.close()
             os.remove(tmp)
@@ -252,8 +253,8 @@ def check_and_run_setup() -> bool:
         cfg = settings.get("espn", {})
         if all([cfg.get("league_id"), cfg.get("espn_s2"), cfg.get("swid")]):
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Login] Failed to check credentials: {e}")
 
     dialog = LoginDialog()
     return dialog.exec() == QDialog.DialogCode.Accepted
