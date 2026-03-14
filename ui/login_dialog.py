@@ -13,7 +13,7 @@ class LoginDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Fantasy Pet — ESPN Login")
         self.setFixedSize(480, 320)
-        self.setStyleSheet("background-color: #1e1e2e;")
+        self.setStyleSheet("background-color: #D8E2F0;")
 
         self._espn_s2 = None
         self._swid = None
@@ -31,7 +31,7 @@ class LoginDialog(QDialog):
         layout.setSpacing(16)
 
         title = QLabel("ESPN Login")
-        title.setStyleSheet("color: #cdd6f4; font-size: 18px; font-weight: bold;")
+        title.setStyleSheet("color: #000A14; font-size: 18px; font-weight: bold;")
         layout.addWidget(title)
 
         instructions = QLabel(
@@ -39,7 +39,7 @@ class LoginDialog(QDialog):
             "2. Log in to your ESPN account\n"
             "3. Return here — we'll detect your login automatically"
         )
-        instructions.setStyleSheet("color: #a6adc8; font-size: 12px; line-height: 1.6;")
+        instructions.setStyleSheet("color: #000A14; font-size: 12px; line-height: 1.6;")
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
 
@@ -61,11 +61,22 @@ class LoginDialog(QDialog):
 
         # DEBUG — remove later
         debug_btn = QPushButton("Debug: Check Cookies Now")
+        debug_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #929EAF;
+                color: #000A14;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #A7C2E5; }
+        """)
         debug_btn.clicked.connect(self._debug_cookies)
         layout.addWidget(debug_btn)
 
         self._status_label = QLabel("Waiting for login...")
-        self._status_label.setStyleSheet("color: #6c7086; font-size: 12px;")
+        self._status_label.setStyleSheet("color: #000A14; font-size: 12px;")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._status_label)
 
@@ -75,24 +86,24 @@ class LoginDialog(QDialog):
         league_layout.setContentsMargins(0, 0, 0, 0)
 
         league_label = QLabel("League:")
-        league_label.setStyleSheet("color: #cdd6f4; font-size: 12px;")
+        league_label.setStyleSheet("color: #000A14; font-size: 12px;")
         league_layout.addWidget(league_label)
 
         self._league_combo = QComboBox()
         self._league_combo.setStyleSheet("""
             QComboBox {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+                background-color: #D8E2F0;
+                color: #000A14;
+                border: 1px solid #929EAF;
                 border-radius: 4px;
                 padding: 4px 8px;
                 font-size: 12px;
             }
             QComboBox::drop-down { border: none; }
             QComboBox QAbstractItemView {
-                background-color: #313244;
-                color: #cdd6f4;
-                selection-background-color: #45475a;
+                background-color: #D8E2F0;
+                color: #000A14;
+                selection-background-color: #A7C2E5;
             }
         """)
         league_layout.addWidget(self._league_combo, stretch=1)
@@ -104,18 +115,18 @@ class LoginDialog(QDialog):
         self._continue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._continue_btn.setStyleSheet("""
             QPushButton {
-                background-color: #89b4fa;
-                color: #1e1e2e;
+                background-color: #A7C2E5;
+                color: #000A14;
                 border-radius: 6px;
                 padding: 10px 20px;
                 font-weight: bold;
                 font-size: 13px;
             }
             QPushButton:disabled {
-                background-color: #313244;
-                color: #6c7086;
+                background-color: #929EAF;
+                color: #D8E2F0;
             }
-            QPushButton:hover:enabled { background-color: #b4d0ff; }
+            QPushButton:hover:enabled { background-color: #D8E2F0; }
         """)
         self._continue_btn.clicked.connect(self._on_continue)
         layout.addWidget(self._continue_btn)
@@ -206,7 +217,7 @@ class LoginDialog(QDialog):
     def _open_browser(self):
         webbrowser.open(ESPN_FANTASY_URL)
         self._status_label.setText("⏳ Waiting for login... (checking every 3 seconds)")
-        self._status_label.setStyleSheet("color: #cdd6f4; font-size: 12px;")
+        self._status_label.setStyleSheet("color: #000A14; font-size: 12px;")
         self._poll_timer.start(3000)
 
     def _poll_for_cookies(self):
@@ -225,7 +236,7 @@ class LoginDialog(QDialog):
     def _on_continue(self):
         if not self._espn_s2 or not self._swid:
             self._status_label.setText("⚠ Not logged in yet.")
-            self._status_label.setStyleSheet("color: #f38ba8; font-size: 12px;")
+            self._status_label.setStyleSheet("color: #c85977; font-size: 12px;")
             return
 
         league_id = self._league_combo.currentData() if self._leagues else None

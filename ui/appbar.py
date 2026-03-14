@@ -55,12 +55,15 @@ class AppBar:
             self._screen_rect = screen
         else:
             user32 = ctypes.windll.user32
+            w = user32.GetSystemMetrics(0)
+            h = user32.GetSystemMetrics(1)
             self._screen_rect = type('R', (), {
-                'left': 0, 'top': 0,
-                'width': lambda s: user32.GetSystemMetrics(0),
-                'height': lambda s: user32.GetSystemMetrics(1),
-                'right': user32.GetSystemMetrics(0),
-                'bottom': user32.GetSystemMetrics(1),
+                'left':   lambda s: 0,
+                'top':    lambda s: 0,
+                'width':  lambda s: w,
+                'height': lambda s: h,
+                'right':  lambda s: w,
+                'bottom': lambda s: h,
             })()
 
         abd = APPBARDATA()
@@ -81,8 +84,9 @@ class AppBar:
         self._registered = False
 
     def set_edge(self, edge: str):
+        saved_screen = getattr(self, '_screen_rect', None)
         self.unregister()
-        self.register(edge)
+        self.register(edge, screen=saved_screen)
 
     def _set_pos(self):
         r = self._screen_rect

@@ -83,15 +83,15 @@ def main():
     tray_menu = QMenu()
     tray_menu.setStyleSheet("""
         QMenu {
-            background-color: #1e1e2e;
-            color: #cdd6f4;
-            border: 1px solid #45475a;
+            background-color: #D8E2F0;
+            color: #000A14;
+            border: 1px solid #929EAF;
             border-radius: 8px;
             padding: 4px;
             font-size: 12px;
         }
         QMenu::item { padding: 6px 20px; border-radius: 4px; }
-        QMenu::item:selected { background-color: #313244; }
+        QMenu::item:selected { background-color: #A7C2E5; }
     """)
 
     show_action = QAction("Show", app)
@@ -123,6 +123,9 @@ def main():
         widget.hide()
         show_action.setVisible(True)
         hide_action.setVisible(False)
+
+    # connect AFTER defining hide_widget
+    event_bus.widget_hidden.connect(hide_widget)
 
     show_action.triggered.connect(show_widget)
     hide_action.triggered.connect(hide_widget)

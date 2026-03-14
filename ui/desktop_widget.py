@@ -6,18 +6,27 @@ from PyQt6.QtWidgets import (
     QScrollArea, QLabel, QMenu, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtGui import QIcon, QAction, QFontDatabase, QFont
 
 from ui.player_card import PlayerCard
 from ui.appbar import AppBar
 from config_utils import SETTINGS_PATH
 from events.event_bus import event_bus
+
 BAR_THICKNESS = 100
 
 
+def _load_pixel_font(size: int = 8) -> QFont:
+    font_id = QFontDatabase.addApplicationFont(
+        os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'pixel.ttf')
+    )
+    families = QFontDatabase.applicationFontFamilies(font_id)
+    return QFont(families[0], size) if families else QFont("Courier", size)
+
+
 class ClickableLabel(QLabel):
-    def __init__(self, text='', on_click=None, hover_color='#89b4fa',
-                 default_color='#6c7086', selected_color='#cdd6f4'):
+    def __init__(self, text='', on_click=None, hover_color='#A7C2E5',
+                 default_color='#929EAF', selected_color='#D8E2F0'):
         super().__init__(text)
         self._on_click = on_click
         self._hover_color = hover_color
@@ -27,22 +36,48 @@ class ClickableLabel(QLabel):
         self._base_style = ""
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
+    def setStyleSheet(self, style: str):
+        self._base_style = style
+        super().setStyleSheet(style)
+
     def set_selected(self, selected: bool, base_style: str = ""):
         self._selected = selected
         self._base_style = base_style
         color = self._selected_color if selected else self._default_color
-        self.setStyleSheet(f"color: {color}; {base_style}")
+        super().setStyleSheet(f"color: {color}; {base_style}")
+
+    def update_colors(self, hover_color: str, default_color: str, selected_color: str):
+        self._hover_color = hover_color
+        self._default_color = default_color
+        self._selected_color = selected_color
+        self.set_selected(self._selected, self._base_style)
 
     def enterEvent(self, event):
-        self.setStyleSheet(f"color: {self._hover_color}; {self._base_style}")
+        super().setStyleSheet(f"color: {self._hover_color}; {self._base_style}")
 
     def leaveEvent(self, event):
         color = self._selected_color if self._selected else self._default_color
-        self.setStyleSheet(f"color: {color}; {self._base_style}")
+        super().setStyleSheet(f"color: {color}; {self._base_style}")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._on_click:
             self._on_click()
+
+    def set_siblings(self, siblings: list):
+        self._siblings = siblings
+
+    def enterEvent(self, event):
+        super().setStyleSheet(f"color: {self._hover_color}; {self._base_style}")
+        for s in getattr(self, '_siblings', []):
+            super(ClickableLabel, s).setStyleSheet(f"color: {s._hover_color}; {s._base_style}")
+
+    def leaveEvent(self, event):
+        color = self._selected_color if self._selected else self._default_color
+        super().setStyleSheet(f"color: {color}; {self._base_style}")
+        for s in getattr(self, '_siblings', []):
+            s_color = s._selected_color if s._selected else s._default_color
+            super(ClickableLabel, s).setStyleSheet(f"color: {s_color}; {s._base_style}")
+
 
 class DesktopWidget(QMainWindow):
     def __init__(self, players=None):
@@ -63,6 +98,7 @@ class DesktopWidget(QMainWindow):
         self._current_matchup_data = {}
         self._team_cache = None
         self._edge = self._load_edge()
+        self._players = []
 
         self._build_ui(players or [])
 
@@ -71,46 +107,68 @@ class DesktopWidget(QMainWindow):
 
         event_bus.matchup_updated.connect(self._on_matchup_updated)
 
+    def _is_horizontal(self) -> bool:
+        return self._edge in ('top', 'bottom')
+
     def _build_ui(self, players: list):
+        self._players = players
+
         central = QWidget()
-        central.setStyleSheet("background-color: rgba(20, 20, 35, 220);")
+        central.setStyleSheet("background-color: rgba(167, 194, 229, 200);")
         self.setCentralWidget(central)
 
-        self._main_layout = QVBoxLayout(central)
+        if self._is_horizontal():
+            self._main_layout = QHBoxLayout(central)
+        else:
+            self._main_layout = QVBoxLayout(central)
         self._main_layout.setContentsMargins(0, 0, 0, 0)
         self._main_layout.setSpacing(0)
 
-        # Score chip at top
+        # ── Scoreboard ────────────────────────────────────────────────────────
         self._score_widget = QWidget()
-        self._score_widget.setFixedHeight(110)
         self._score_widget.setStyleSheet(
-            "background-color: rgba(30, 30, 50, 240); border: none;"
+            "background-color: rgba(167, 194, 229, 200); border: none;"
         )
+        if self._is_horizontal():
+            self._score_widget.setFixedWidth(110)
+        else:
+            self._score_widget.setFixedHeight(110)
+
         score_layout = QVBoxLayout(self._score_widget)
         score_layout.setContentsMargins(8, 8, 8, 8)
         score_layout.setSpacing(2)
 
-        self._team_name_label = ClickableLabel("—", on_click=self._click_my_team)
+        self._team_name_label = ClickableLabel("—", on_click=self._click_my_team,
+            hover_color='#A7C2E5', default_color='#000A14', selected_color='#000A14')
         self._team_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._team_name_label.setStyleSheet(
-            "color: #89b4fa; font-size: 11px; font-weight: bold;"
-        )
         self._team_name_label.setWordWrap(True)
+        self._team_name_label.setFont(_load_pixel_font(6))
+        self._team_name_label.setStyleSheet("color: #000A14;")
 
-        self._my_score_label = ClickableLabel("—", on_click=self._click_my_team)
+        self._my_score_label = ClickableLabel("—", on_click=self._click_my_team,
+            hover_color='#A7C2E5', default_color='#000A14', selected_color='#000A14')
         self._my_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._my_score_label.setStyleSheet(
-            "color: #cdd6f4; font-size: 18px; font-weight: bold;"
-        )
+        self._my_score_label.setFont(_load_pixel_font(10))
+        self._my_score_label.setStyleSheet("color: #000A14;")
 
-        self._opp_score_label = ClickableLabel("—", on_click=self._click_opp_team)
+        self._opp_score_label = ClickableLabel("—", on_click=self._click_opp_team,
+            hover_color='#A7C2E5', default_color='#000A14', selected_color='#000A14')
         self._opp_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._opp_score_label.setStyleSheet("color: #6c7086; font-size: 18px;")
+        self._opp_score_label.setFont(_load_pixel_font(10))
+        self._opp_score_label.setStyleSheet("color: #000A14;")
 
-        self._opp_name_label = ClickableLabel("—", on_click=self._click_opp_team)
+        self._opp_name_label = ClickableLabel("—", on_click=self._click_opp_team,
+            hover_color='#A7C2E5', default_color='#000A14', selected_color='#000A14')
         self._opp_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._opp_name_label.setStyleSheet("color: #6c7086; font-size: 11px;")
         self._opp_name_label.setWordWrap(True)
+        self._opp_name_label.setFont(_load_pixel_font(6))
+        self._opp_name_label.setStyleSheet("color: #000A14;")
+        
+        self._team_name_label.set_siblings([self._my_score_label])
+        self._my_score_label.set_siblings([self._team_name_label])
+
+        self._opp_name_label.set_siblings([self._opp_score_label])
+        self._opp_score_label.set_siblings([self._opp_name_label])
 
         score_layout.addWidget(self._team_name_label)
         score_layout.addWidget(self._my_score_label)
@@ -119,57 +177,94 @@ class DesktopWidget(QMainWindow):
 
         self._main_layout.addWidget(self._score_widget)
 
-        # Scrollable player column
+        # ── Scrollable player list ────────────────────────────────────────────
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet("""
-            QScrollArea { border: none; background: transparent; }
-            QScrollBar:vertical {
-                background: rgba(30,30,50,100);
-                width: 4px;
-                border-radius: 2px;
-            }
-            QScrollBar::handle:vertical {
-                background: #45475a;
-                border-radius: 2px;
-                min-height: 20px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-        """)
-        
-        # Navigation buttons at bottom
+
+        if self._is_horizontal():
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setStyleSheet("""
+                QScrollArea { border: none; background: transparent; }
+                QScrollBar:horizontal {
+                    background: rgba(167,194,229,100);
+                    height: 4px;
+                    border-radius: 2px;
+                }
+                QScrollBar::handle:horizontal {
+                    background: #A7C2E5;
+                    border-radius: 2px;
+                    min-width: 20px;
+                }
+                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
+            """)
+        else:
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll.setStyleSheet("""
+                QScrollArea { border: none; background: transparent; }
+                QScrollBar:vertical {
+                    background: rgba(167,194,229,100);
+                    width: 4px;
+                    border-radius: 2px;
+                }
+                QScrollBar::handle:vertical {
+                    background: #A7C2E5;
+                    border-radius: 2px;
+                    min-height: 20px;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+            """)
+
+        self._players_widget = QWidget()
+        self._players_widget.setStyleSheet("background: transparent;")
+
+        if self._is_horizontal():
+            self._players_layout = QHBoxLayout(self._players_widget)
+            self._players_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        else:
+            self._players_layout = QVBoxLayout(self._players_widget)
+            self._players_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self._players_layout.setContentsMargins(0, 0, 0, 0)
+        self._players_layout.setSpacing(2)
+
+        scroll.setWidget(self._players_widget)
+        self._main_layout.addWidget(scroll)
+
+        # ── Nav buttons ───────────────────────────────────────────────────────
         nav_widget = QWidget()
-        nav_widget.setFixedHeight(36)
-        nav_widget.setStyleSheet(
-            "background-color: rgba(30, 30, 50, 240); border: none;"
-        )
-        nav_layout = QHBoxLayout(nav_widget)
-        nav_layout.setContentsMargins(4, 4, 4, 4)
-        nav_layout.setSpacing(4)
+        nav_widget.setStyleSheet("background: transparent; border: none;")
 
-        prev_btn = ClickableLabel("◀", on_click=lambda: self._cycle_matchup('prev'))
-        prev_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        prev_btn.setFixedWidth(40)
-        prev_btn.setStyleSheet(
-            "color: #89b4fa; font-size: 16px; font-weight: bold;"
-            "background: rgba(49,50,68,180); border-radius: 4px;"
-        )
+        if self._is_horizontal():
+            nav_widget.setFixedWidth(28)
+            nav_layout = QVBoxLayout(nav_widget)
+            nav_layout.setContentsMargins(0, 0, 0, 0)
+            nav_layout.setSpacing(0)
+            prev_btn = ClickableLabel("▲", on_click=lambda: self._cycle_matchup('prev'))
+            next_btn = ClickableLabel("▼", on_click=lambda: self._cycle_matchup('next'))
+            prev_btn.setFixedSize(28, 40)
+            next_btn.setFixedSize(28, 40)
+        else:
+            nav_widget.setFixedHeight(28)
+            nav_layout = QHBoxLayout(nav_widget)
+            nav_layout.setContentsMargins(0, 0, 0, 0)
+            nav_layout.setSpacing(0)
+            prev_btn = ClickableLabel("◀", on_click=lambda: self._cycle_matchup('prev'))
+            next_btn = ClickableLabel("▶", on_click=lambda: self._cycle_matchup('next'))
+            prev_btn.setFixedSize(40, 28)
+            next_btn.setFixedSize(40, 28)
 
-        next_btn = ClickableLabel("▶", on_click=lambda: self._cycle_matchup('next'))
-        next_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        next_btn.setFixedWidth(40)
-        next_btn.setStyleSheet(
-            "color: #89b4fa; font-size: 16px; font-weight: bold;"
-            "background: rgba(49,50,68,180); border-radius: 4px;"
-        )
+        for btn in (prev_btn, next_btn):
+            btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            btn.setFont(_load_pixel_font(8))
+            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn.setStyleSheet("color: #000A14; font-weight: bold; background: transparent; border: none;")
 
-        self._matchup_counter_label = QLabel("— / —")
+        self._matchup_counter_label = QLabel("—/—")
         self._matchup_counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._matchup_counter_label.setStyleSheet(
-            "color: #6c7086; font-size: 10px;"
-        )
+        self._matchup_counter_label.setFont(_load_pixel_font(6))
+        self._matchup_counter_label.setStyleSheet("color: #000A14; background: transparent;")
 
         nav_layout.addWidget(prev_btn)
         nav_layout.addWidget(self._matchup_counter_label)
@@ -177,16 +272,7 @@ class DesktopWidget(QMainWindow):
 
         self._main_layout.addWidget(nav_widget)
 
-        self._players_widget = QWidget()
-        self._players_widget.setStyleSheet("background: transparent;")
-        self._players_layout = QVBoxLayout(self._players_widget)
-        self._players_layout.setContentsMargins(0, 4, 0, 4)
-        self._players_layout.setSpacing(2)
-        self._players_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        scroll.setWidget(self._players_widget)
-        self._main_layout.addWidget(scroll)
-
+        # ── Cards ─────────────────────────────────────────────────────────────
         self._cards: dict[int, PlayerCard] = {}
 
         from ui.roster_view_shim import RosterViewShim
@@ -201,19 +287,41 @@ class DesktopWidget(QMainWindow):
                 w.setParent(None)
         self._cards.clear()
 
+        BENCH_SLOTS = {'BE', 'BN'}
+        IR_SLOTS    = {'IR'}
+
+        shown_bench = False
+        shown_ir    = False
+
         for player in players:
+            slot = getattr(player, 'lineup_slot', '')
+
+            if not shown_bench and slot in BENCH_SLOTS:
+                self._players_layout.addWidget(self._make_divider("Bench"))
+                shown_bench = True
+
+            if not shown_ir and slot in IR_SLOTS:
+                self._players_layout.addWidget(self._make_divider("IR"))
+                shown_ir = True
+
             row = self._make_player_row(player)
             self._players_layout.addWidget(row)
-
+            
     def _make_player_row(self, player) -> QWidget:
         row = QWidget()
-        row.setFixedHeight(BAR_THICKNESS)
+        if self._is_horizontal():
+            row.setFixedWidth(BAR_THICKNESS)
+        else:
+            row.setFixedHeight(BAR_THICKNESS)
         row.setStyleSheet("""
             QWidget { background: transparent; border: none; }
             QWidget:hover { background: rgba(49,50,68,120); }
         """)
 
-        layout = QHBoxLayout(row)
+        if self._is_horizontal():
+            layout = QVBoxLayout(row)
+        else:
+            layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
@@ -223,11 +331,65 @@ class DesktopWidget(QMainWindow):
             points=player.points_this_week,
             nba_team=getattr(player, 'nba_team', '')
         )
-        card.setFixedSize(BAR_THICKNESS, BAR_THICKNESS)
+        card.setFixedSize(76, 94)
         layout.addWidget(card)
 
         self._cards[player.player_id] = card
         return row
+
+    def _make_divider(self, text: str) -> QWidget:
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+
+        if self._is_horizontal():
+            container.setFixedWidth(30)
+            layout = QVBoxLayout(container)
+            layout.setContentsMargins(0, 4, 0, 4)
+            layout.setSpacing(2)
+
+            top_line = QLabel("|")
+            top_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            top_line.setFont(_load_pixel_font(6))
+            top_line.setStyleSheet("color: #000A14; background: transparent;")
+
+            label = QLabel(text)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setFont(_load_pixel_font(5))
+            label.setStyleSheet("color: #000A14; background: transparent;")
+            label.setWordWrap(True)
+
+            bot_line = QLabel("|")
+            bot_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            bot_line.setFont(_load_pixel_font(6))
+            bot_line.setStyleSheet("color: #000A14; background: transparent;")
+
+            layout.addWidget(top_line)
+            layout.addWidget(label)
+            layout.addWidget(bot_line)
+        else:
+            container.setFixedHeight(24)
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(4, 0, 4, 0)
+            layout.setSpacing(4)
+
+            left_line = QLabel("———")
+            left_line.setFont(_load_pixel_font(5))
+            left_line.setStyleSheet("color: #000A14; background: transparent;")
+
+            label = QLabel(text)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setFont(_load_pixel_font(5))
+            label.setStyleSheet("color: #000A14; background: transparent;")
+
+            right_line = QLabel("———")
+            right_line.setFont(_load_pixel_font(5))
+            right_line.setStyleSheet("color: #000A14; background: transparent;")
+
+            layout.addWidget(left_line)
+            layout.addWidget(label)
+            layout.addWidget(right_line)
+
+        return container
 
     # ── AppBar ────────────────────────────────────────────────────────────────
 
@@ -245,12 +407,26 @@ class DesktopWidget(QMainWindow):
         self._appbar.register(self._edge, screen=screen.geometry())
 
     def _set_edge(self, edge: str):
+        old_horizontal = self._is_horizontal()
         self._edge = edge
         self._save_edge(edge)
+
+        if old_horizontal != self._is_horizontal():
+            players = list(self._players)
+            self._build_ui(players)
+            for player in players:
+                card = self._cards.get(player.player_id)
+                if card and player.name in self._live_data_cache:
+                    card.set_live_data(self._live_data_cache[player.name])
+            if self._current_matchup_data:
+                self._on_matchup_updated(self._current_matchup_data)
+            self._update_nav_counter()
+
         if self._appbar:
             self._appbar.set_edge(edge)
 
     # ── Scoreboard ────────────────────────────────────────────────────────────
+
     def _on_matchup_updated(self, data: dict):
         if not data:
             self._team_name_label.setText("—")
@@ -270,42 +446,54 @@ class DesktopWidget(QMainWindow):
         my_selected  = self._current_team_id == data.get('my_team_id')
         opp_selected = self._current_team_id == data.get('opp_team_id')
 
-        score_style   = "font-size: 18px; font-weight: bold;"
-        name_style    = "font-size: 11px; font-weight: bold;"
-        opp_score_style = "font-size: 18px;"
-        opp_name_style  = "font-size: 11px;"
-
         win_color  = '#a6e3a1'
-        lose_color = '#f38ba8'
+        lose_color = '#c85977'
 
         self._team_name_label.setText(my_team)
-        self._team_name_label.set_selected(my_selected, name_style)
+        my_team_color = win_color if winning else lose_color
+        self._team_name_label.update_colors(hover_color=my_team_color,
+            default_color='#000A14', selected_color=my_team_color)
+        self._team_name_label.set_selected(my_selected, "")
 
-        my_score_color = (win_color if winning else lose_color) if my_selected else ""
+        my_score_color = win_color if winning else lose_color
         self._my_score_label.setText(f"{my_score:.1f}")
-        self._my_score_label.set_selected(my_selected,
-            f"{score_style} color: {my_score_color};" if my_score_color else score_style)
+        if my_selected:
+            self._my_score_label.setFont(_load_pixel_font(10))
+            self._my_score_label.update_colors(hover_color=my_score_color,
+                default_color=my_score_color, selected_color=my_score_color)
+            self._my_score_label.set_selected(my_selected, "font-weight: bold;")
+        else:
+            self._my_score_label.setFont(_load_pixel_font(9))
+            self._my_score_label.update_colors(hover_color=my_score_color,
+                default_color='#000A14', selected_color='#000A14')
+            self._my_score_label.set_selected(my_selected, "")
 
-        opp_score_color = (lose_color if winning else win_color) if opp_selected else ""
+        opp_score_color = lose_color if winning else win_color
         self._opp_score_label.setText(f"{opp_score:.1f}")
-        self._opp_score_label.set_selected(opp_selected,
-            f"{opp_score_style} color: {opp_score_color};" if opp_score_color else opp_score_style)
+        if opp_selected:
+            self._opp_score_label.setFont(_load_pixel_font(10))
+            self._opp_score_label.update_colors(hover_color=opp_score_color,
+                default_color=opp_score_color, selected_color=opp_score_color)
+            self._opp_score_label.set_selected(opp_selected, "font-weight: bold;")
+        else:
+            self._opp_score_label.setFont(_load_pixel_font(9))
+            self._opp_score_label.update_colors(hover_color=opp_score_color,
+                default_color='#000A14', selected_color='#000A14')
+            self._opp_score_label.set_selected(opp_selected, "")
 
         self._opp_name_label.setText(opp_name)
-        self._opp_name_label.set_selected(opp_selected, opp_name_style)
-        
-    
+        opp_team_color = lose_color if winning else win_color
+        self._opp_name_label.update_colors(hover_color=opp_team_color,
+            default_color='#000A14', selected_color=opp_team_color)
+        self._opp_name_label.set_selected(opp_selected, "")
+
     def _click_my_team(self):
-        # print(f"[Debug] _click_my_team fired, data: {self._current_matchup_data}")
         team_id = self._current_matchup_data.get('my_team_id')
-        # print(f"[Debug] my_team_id: {team_id}")
         if team_id:
             self._switch_to_team(team_id)
 
     def _click_opp_team(self):
-        # print(f"[Debug] _click_opp_team fired, data: {self._current_matchup_data}")
         team_id = self._current_matchup_data.get('opp_team_id')
-        # print(f"[Debug] opp_team_id: {team_id}")
         if team_id:
             self._switch_to_team(team_id)
 
@@ -334,7 +522,6 @@ class DesktopWidget(QMainWindow):
                 }
                 break
 
-        # Clamp in case matchup count shrank since last week
         self._current_matchup_idx = min(
             self._current_matchup_idx,
             max(0, cache.matchup_count() - 1)
@@ -357,6 +544,7 @@ class DesktopWidget(QMainWindow):
 
         self._current_team_id = team_id
         players = data['full_snapshot']
+        self._players = players
 
         old_player_ids = set(self._cards.keys())
         new_player_ids = set(p.player_id for p in players)
@@ -372,17 +560,16 @@ class DesktopWidget(QMainWindow):
                     card.set_live_data(self._live_data_cache[player.name])
 
         self._save_last_team_id(team_id)
-        # Refresh scoreboard highlight
         if self._current_matchup_data:
             self._on_matchup_updated(self._current_matchup_data)
-    
+
     def _update_nav_counter(self):
         if self._team_cache:
             total = self._team_cache.matchup_count()
             self._matchup_counter_label.setText(
-                f"{self._current_matchup_idx + 1} / {total}"
+                f"{self._current_matchup_idx + 1}/{total}"
             )
-        
+
     def _cycle_matchup(self, direction: str):
         if not self._team_cache:
             return
@@ -408,16 +595,16 @@ class DesktopWidget(QMainWindow):
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
-                background-color: #1e1e2e;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+                background-color: #D8E2F0;
+                color: #000A14;
+                border: 1px solid #929EAF;
                 border-radius: 8px;
                 padding: 4px;
                 font-size: 12px;
             }
             QMenu::item { padding: 6px 20px; border-radius: 4px; }
-            QMenu::item:selected { background-color: #313244; }
-            QMenu::separator { height: 1px; background: #45475a; margin: 4px 8px; }
+            QMenu::item:selected { background-color: #A7C2E5; }
+            QMenu::separator { height: 1px; background: #929EAF; margin: 4px 8px; }
         """)
 
         collapse_action = QAction("Hide", self)
@@ -438,8 +625,8 @@ class DesktopWidget(QMainWindow):
 
         edge_menu = menu.addMenu("Dock Edge")
         edge_menu.setStyleSheet(menu.styleSheet())
-        for label, edge in [("Left", "left"), ("Right", "right"),
-                            ("Top", "top"), ("Bottom", "bottom")]:
+        # cycling through docking options
+        for label, edge in [("Left", "left"), ("Right", "right"), ("Top", "top")]:
             a = QAction(label, self)
             a.setCheckable(True)
             a.setChecked(self._edge == edge)
@@ -512,6 +699,7 @@ class DesktopWidget(QMainWindow):
             self._appbar.unregister()
             self._appbar = None
         self.hide()
+        event_bus.widget_hidden.emit()
 
     # ── Misc ──────────────────────────────────────────────────────────────────
 

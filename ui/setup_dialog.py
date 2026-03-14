@@ -16,28 +16,28 @@ class SetupDialog(QDialog):
         self.setWindowTitle("Fantasy Pet — First Time Setup")
         self.setFixedSize(200, 260)
         self.setStyleSheet("""
-            QDialog { background-color: #1e1e2e; }
-            QLabel  { color: #cdd6f4; font-size: 14px; }
+            QDialog { background-color: #D8E2F0; }
+            QLabel  { color: #000A14; font-size: 14px; }
             QLineEdit {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
+                background-color: #D8E2F0;
+                color: #000A14;
+                border: 1px solid #929EAF;
                 border-radius: 6px;
                 padding: 1px;
                 font-size: 12px;
             }
             QPushButton {
-                background-color: #89b4fa;
-                color: #1e1e2e;
+                background-color: #A7C2E5;
+                color: #000A14;
                 border-radius: 6px;
                 padding: 1px 20px;
                 font-weight: bold;
                 font-size: 14px;
             }
-            QPushButton:hover { background-color: #b4d0ff; }
+            QPushButton:hover { background-color: #929EAF; }
             QPushButton#help_btn {
                 background-color: transparent;
-                color: #89b4fa;
+                color: #000A14;
                 text-decoration: underline;
                 padding: 0;
                 font-size: 13px;
@@ -52,7 +52,7 @@ class SetupDialog(QDialog):
         layout.setContentsMargins(16, 12, 16, 12) # window border argins
 
         title = QLabel("SETUP")
-        title.setStyleSheet("color: #cdd6f4; font-size: 16px; font-weight: bold;")
+        title.setStyleSheet("color: #000A14; font-size: 16px; font-weight: bold;")
         layout.addWidget(title)
 
         # League ID
@@ -93,7 +93,7 @@ class SetupDialog(QDialog):
 
         # Status label
         self._status = QLabel("")
-        self._status.setStyleSheet("color: #f38ba8; font-size: 11px;")
+        self._status.setStyleSheet("color: #c85977; font-size: 11px;")
         layout.addWidget(self._status)
 
     def _load_existing(self):
@@ -117,6 +117,7 @@ class SetupDialog(QDialog):
         swid      = self._swid.text().strip()
 
         if not all([league_id, espn_s2, swid]):
+            self._status.setStyleSheet("color: #c85977; font-size: 11px;")
             self._status.setText("⚠ All fields are required.")
             return
 
@@ -136,7 +137,7 @@ class SetupDialog(QDialog):
                 swid=swid
             )
         except Exception as e:
-            self._status.setStyleSheet("color: #f38ba8; font-size: 11px;")
+            self._status.setStyleSheet("color: #c85977; font-size: 11px;")
             self._status.setText(f"Connection failed: {e}")
             return
 
@@ -150,10 +151,11 @@ class SetupDialog(QDialog):
             with open(SETTINGS_PATH, 'w') as f:
                 json.dump(settings, f, indent=2)
         except Exception as e:
-            self._status.setStyleSheet("color: #f38ba8; font-size: 11px;")
+            self._status.setStyleSheet("color: #c85977; font-size: 11px;")
             self._status.setText(f"Could not save settings: {e}")
             return
 
+        self._status.setStyleSheet("color: #a6e3a1; font-size: 11px;")
         self._status.setText("YIPPEE we Connected frfr")
         self.accept()
 

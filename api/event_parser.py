@@ -14,7 +14,9 @@ class PlayerState:
     is_playing_today: bool
     last_known_points: float = 0.0
     nba_team: str = ""
-
+    lineup_slot: str = ""
+    slot_order: int = 10
+    
 @dataclass
 class GameEvent:
     player_id: int
@@ -32,11 +34,16 @@ STARTER_SLOTS = {
     'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL', 'UT'
 }
 
-def build_snapshot(roster, starters_only: bool = True) -> List[PlayerState]:
-    """Convert a raw ESPN NBA roster into a list of PlayerState objects."""
+SLOT_ORDER = {
+    'PG': 0, 'SG': 1, 'SF': 2, 'PF': 3, 'C': 4,
+    'G': 5, 'F': 6, 'UTIL': 7, 'UT': 7,
+    'BE': 8, 'BN': 8,
+    'IR': 9,
+}
+
+def build_snapshot(roster, starters_only: bool = False) -> List[PlayerState]:
     snapshot = []
     for player in roster:
-        # Filter to starters only by default
         if starters_only:
             slot = getattr(player, 'lineupSlot', '') or ''
             if slot.upper() not in STARTER_SLOTS:
@@ -49,6 +56,7 @@ def build_snapshot(roster, starters_only: bool = True) -> List[PlayerState]:
             print(f"[EventParser] Failed to get season avg: {e}")
             season_avg = 0.0
 
+        slot = (getattr(player, 'lineupSlot', '') or '').upper()
         snapshot.append(PlayerState(
             player_id=player.playerId,
             name=player.name,
@@ -57,10 +65,13 @@ def build_snapshot(roster, starters_only: bool = True) -> List[PlayerState]:
             projected_points=season_avg,
             is_playing_today=season_avg > 0.0,
             last_known_points=0.0,
-            nba_team=getattr(player, 'proTeam', '') or '',  # ESPN stores NBA team here
+            nba_team=getattr(player, 'proTeam', '') or '',
+            lineup_slot=slot,
+            slot_order=SLOT_ORDER.get(slot, 10),
         ))
-    return snapshot
 
+    snapshot.sort(key=lambda p: p.slot_order)
+    return snapshot
 
 # --- Event Comparison ---
 

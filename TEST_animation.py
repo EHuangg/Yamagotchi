@@ -44,9 +44,9 @@ combo = QComboBox()
 combo.addItems(["madeShot", "block", "idle"])
 combo.setStyleSheet("""
     QComboBox {
-        background-color: #313244;
-        color: #cdd6f4;
-        border: 1px solid #45475a;
+        background-color: #000A14;
+        color: #D8E2F0;
+        border: 1px solid #929EAF;
         border-radius: 4px;
         padding: 4px 8px;
         font-size: 13px;
@@ -54,9 +54,9 @@ combo.setStyleSheet("""
     }
     QComboBox::drop-down { border: none; }
     QComboBox QAbstractItemView {
-        background-color: #313244;
-        color: #cdd6f4;
-        selection-background-color: #45475a;
+        background-color: #000A14;
+        color: #D8E2F0;
+        selection-background-color: #929EAF;
     }
 """)
 controls_layout.addWidget(combo)
@@ -64,28 +64,28 @@ controls_layout.addWidget(combo)
 play_btn = QPushButton("▶ Play Once")
 play_btn.setStyleSheet("""
     QPushButton {
-        background-color: #89b4fa;
-        color: #1e1e2e;
+        background-color: #A7C2E5;
+        color: #000A14;
         border-radius: 4px;
         padding: 6px 16px;
         font-weight: bold;
         font-size: 13px;
     }
-    QPushButton:hover { background-color: #b4d0ff; }
+    QPushButton:hover { background-color: #D8E2F0; }
 """)
 controls_layout.addWidget(play_btn)
 
 close_btn = QPushButton("✕ Close")
 close_btn.setStyleSheet("""
     QPushButton {
-        background-color: #f38ba8;
-        color: #1e1e2e;
+        background-color: #c85977;
+        color: #000A14;
         border-radius: 4px;
         padding: 6px 16px;
         font-weight: bold;
         font-size: 13px;
     }
-    QPushButton:hover { background-color: #ff8ba8; }
+    QPushButton:hover { background-color: #d97a8f; }
 """)
 close_btn.clicked.connect(app.quit)
 controls_layout.addWidget(close_btn)

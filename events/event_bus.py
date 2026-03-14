@@ -21,4 +21,6 @@ class EventBus(QObject):
     # reset cache signal
     daily_reset = pyqtSignal()
 
+    # hide/show app bar
+    widget_hidden = pyqtSignal()
 event_bus = EventBus()

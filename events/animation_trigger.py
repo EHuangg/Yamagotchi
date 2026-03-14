@@ -118,48 +118,57 @@ class AnimationTrigger:
                 card.set_game_finished(player.points_this_week)
     
     def _handle_live_stats(self, stats: dict):
-        name_to_card = {card.player_name: (player_id, card) 
-                        for player_id, card in self.roster_view._cards.items()}
+        name_to_card = {}
+        for player_id, card in self.roster_view._cards.items():
+            try:
+                _ = card.player_name  # throws if deleted
+                name_to_card[card.player_name] = (player_id, card)
+            except RuntimeError:
+                pass
 
         for name, data in stats.items():
             if name not in name_to_card:
                 continue
             player_id, card = name_to_card[name]
-            card.set_live_data(data)
 
-            new_fpts = data.get('fantasy_pts', 0.0)
-            new_fgm  = data.get('FGM', 0)
-            new_fga  = data.get('FGA', 0)
-            new_blk  = data.get('BLK', 0)
+            try:
+                card.set_live_data(data)
 
-            if not self._initialized:
-                # Seed values without triggering animations
+                new_fpts = data.get('fantasy_pts', 0.0)
+                new_fgm  = data.get('FGM', 0)
+                new_fga  = data.get('FGA', 0)
+                new_blk  = data.get('BLK', 0)
+
+                if not self._initialized:
+                    card._last_fpts = new_fpts
+                    card._last_fgm  = new_fgm
+                    card._last_fga  = new_fga
+                    card._last_blk  = new_blk
+                    continue
+
+                old_fpts = getattr(card, '_last_fpts', 0.0)
+                old_fgm  = getattr(card, '_last_fgm',  0)
+                old_fga  = getattr(card, '_last_fga',  0)
+                old_blk  = getattr(card, '_last_blk',  0)
+                delta    = new_fpts - old_fpts
+
+                if new_blk > old_blk:
+                    card.animate('block')
+                elif new_fgm > old_fgm:
+                    card.animate('madeShot')
+                elif new_fga > old_fga:
+                    card.animate('missedShot')
+
+                if delta > 0:
+                    self._handle('BIG_GAME' if delta >= 8 else 'POINTS_SCORED', player_id, delta)
+
                 card._last_fpts = new_fpts
                 card._last_fgm  = new_fgm
                 card._last_fga  = new_fga
                 card._last_blk  = new_blk
-                continue
 
-            old_fpts = getattr(card, '_last_fpts', 0.0)
-            old_fgm  = getattr(card, '_last_fgm',  0)
-            old_fga  = getattr(card, '_last_fga',  0)
-            old_blk  = getattr(card, '_last_blk',  0)
-            delta    = new_fpts - old_fpts
-
-            if new_blk > old_blk:
-                card.animate('block')
-            elif new_fgm > old_fgm:
-                card.animate('madeShot')
-            elif new_fga > old_fga:
-                card.animate('missedShot')
-
-            if delta > 0:
-                self._handle('BIG_GAME' if delta >= 8 else 'POINTS_SCORED', player_id, delta)
-
-            card._last_fpts = new_fpts
-            card._last_fgm  = new_fgm
-            card._last_fga  = new_fga
-            card._last_blk  = new_blk
+            except RuntimeError:
+                pass
 
         if not self._initialized:
             self._initialized = True
