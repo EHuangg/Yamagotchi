@@ -108,14 +108,6 @@ class AnimationTrigger:
             card = self.roster_view.get_card(player.player_id)
             if not card:
                 continue
-
-            if player.is_playing_today and player.points_this_week > 0:
-                card.set_live(True)
-            elif not player.is_playing_today and player.points_this_week == 0:
-                card.set_inactive("No game")
-            elif not player.is_playing_today and player.points_this_week > 0:
-                card.set_live(False)
-                card.set_game_finished(player.points_this_week)
     
     def _handle_live_stats(self, stats: dict):
         name_to_card = {}
@@ -132,7 +124,6 @@ class AnimationTrigger:
             player_id, card = name_to_card[name]
 
             try:
-                card.set_live_data(data)
 
                 new_fpts = data.get('fantasy_pts', 0.0)
                 new_fgm  = data.get('FGM', 0)
@@ -172,3 +163,6 @@ class AnimationTrigger:
 
         if not self._initialized:
             self._initialized = True
+            
+    def reset_initialized(self):
+        self._initialized = False

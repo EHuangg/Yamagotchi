@@ -64,7 +64,7 @@ class ESPNClient:
                         if not away_is_team:
                             matchup = {
                                 'my_team':     m.home_team.team_name,
-                                'my_score':    0.0,
+                                'my_score':    m.home_score or 0.0,
                                 'opp_team':    'BYE',
                                 'opp_score':   0.0,
                                 'my_players':  [],
@@ -77,7 +77,7 @@ class ESPNClient:
                         if not home_is_team:
                             matchup = {
                                 'my_team':     m.away_team.team_name,
-                                'my_score':    0.0,
+                                'my_score':    m.away_score or 0.0,
                                 'opp_team':    'BYE',
                                 'opp_score':   0.0,
                                 'my_players':  [],

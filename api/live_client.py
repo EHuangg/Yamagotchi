@@ -147,6 +147,9 @@ class LiveClient:
         to only return stats for players on the user's roster.
         Returns dict of player_name → stats dict.
         """
+        print(f"[LiveClient] Looking up: {name}, found game: {game is not None}")
+
+        
         roster_set = set(roster_names)
         all_stats  = {}
 

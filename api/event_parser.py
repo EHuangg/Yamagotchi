@@ -16,6 +16,7 @@ class PlayerState:
     nba_team: str = ""
     lineup_slot: str = ""
     slot_order: int = 10
+    injury_status: str = ""  # 'ACTIVE', 'QUESTIONABLE', 'DOUBTFUL', 'OUT', 'IR'
     
 @dataclass
 class GameEvent:
@@ -68,6 +69,7 @@ def build_snapshot(roster, starters_only: bool = False) -> List[PlayerState]:
             nba_team=getattr(player, 'proTeam', '') or '',
             lineup_slot=slot,
             slot_order=SLOT_ORDER.get(slot, 10),
+            injury_status=getattr(player, 'injuryStatus', '') or '',
         ))
 
     snapshot.sort(key=lambda p: p.slot_order)

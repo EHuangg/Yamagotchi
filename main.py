@@ -171,11 +171,21 @@ def main():
 
     def on_live_stats_updated(stats: dict):
         widget._live_data_cache.update(stats)
-        # Update scores in current matchup display without overwriting team IDs
+        
+        # Push live data directly to visible cards
+        for name, data in stats.items():
+            for player_id, card in widget._cards.items():
+                try:
+                    if card.player_name == name:
+                        card.set_live_data(data)
+                        break
+                except RuntimeError:
+                    pass
+        # Update scoreboard scores
         current = widget._current_matchup_data
         if current and current.get('my_team_id'):
             my_data  = team_cache.get_team(current['my_team_id'])
-            opp_data = team_cache.get_team(current['opp_team_id'])
+            opp_data = team_cache.get_team(current.get('opp_team_id'))
             if my_data and opp_data:
                 current['my_score']  = my_data['matchup'].get('my_score', current['my_score'])
                 current['opp_score'] = my_data['matchup'].get('opp_score', current['opp_score'])

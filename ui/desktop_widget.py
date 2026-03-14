@@ -78,6 +78,25 @@ class ClickableLabel(QLabel):
             s_color = s._selected_color if s._selected else s._default_color
             super(ClickableLabel, s).setStyleSheet(f"color: {s_color}; {s._base_style}")
 
+class _RotatedDivider(QWidget):
+    def __init__(self, text: str):
+        super().__init__()
+        self._text = f"——— {text} ———"
+        self.setFixedWidth(24)
+        self.setStyleSheet("background: transparent;")
+
+    def paintEvent(self, event):
+        from PyQt6.QtGui import QPainter, QColor
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.rotate(-90)
+        painter.translate(-self.height() / 2, -self.width() / 2)
+        painter.setPen(QColor("#000A14"))
+        painter.setFont(_load_pixel_font(5))
+        painter.drawText(0, 0, self.height(), self.width(),
+                         Qt.AlignmentFlag.AlignCenter, self._text)
+        painter.end()
 
 class DesktopWidget(QMainWindow):
     def __init__(self, players=None):
@@ -307,16 +326,15 @@ class DesktopWidget(QMainWindow):
             row = self._make_player_row(player)
             self._players_layout.addWidget(row)
             
+        if hasattr(self, 'roster_view') and hasattr(self.roster_view, '_trigger'):
+            self.roster_view._trigger.reset_initialized()
+            
     def _make_player_row(self, player) -> QWidget:
         row = QWidget()
         if self._is_horizontal():
             row.setFixedWidth(BAR_THICKNESS)
         else:
             row.setFixedHeight(BAR_THICKNESS)
-        row.setStyleSheet("""
-            QWidget { background: transparent; border: none; }
-            QWidget:hover { background: rgba(49,50,68,120); }
-        """)
 
         if self._is_horizontal():
             layout = QVBoxLayout(row)
@@ -329,66 +347,39 @@ class DesktopWidget(QMainWindow):
             player_name=player.name,
             position=player.position,
             points=player.points_this_week,
-            nba_team=getattr(player, 'nba_team', '')
+            nba_team=getattr(player, 'nba_team', ''),
+            injury_status=getattr(player, 'injury_status', ''),
         )
         card.setFixedSize(76, 94)
+        card._refresh_display()  # apply injury tag immediately
         layout.addWidget(card)
 
         self._cards[player.player_id] = card
         return row
 
     def _make_divider(self, text: str) -> QWidget:
+        if self._is_horizontal():
+            return _RotatedDivider(text)
+        
         container = QWidget()
         container.setStyleSheet("background: transparent;")
+        container.setFixedHeight(24)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(4)
 
-        if self._is_horizontal():
-            container.setFixedWidth(30)
-            layout = QVBoxLayout(container)
-            layout.setContentsMargins(0, 4, 0, 4)
-            layout.setSpacing(2)
+        left_line  = QLabel("———")
+        label      = QLabel(text)
+        right_line = QLabel("———")
 
-            top_line = QLabel("|")
-            top_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            top_line.setFont(_load_pixel_font(6))
-            top_line.setStyleSheet("color: #000A14; background: transparent;")
+        for w in (left_line, label, right_line):
+            w.setFont(_load_pixel_font(5))
+            w.setStyleSheet("color: #000A14; background: transparent;")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            label = QLabel(text)
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setFont(_load_pixel_font(5))
-            label.setStyleSheet("color: #000A14; background: transparent;")
-            label.setWordWrap(True)
-
-            bot_line = QLabel("|")
-            bot_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            bot_line.setFont(_load_pixel_font(6))
-            bot_line.setStyleSheet("color: #000A14; background: transparent;")
-
-            layout.addWidget(top_line)
-            layout.addWidget(label)
-            layout.addWidget(bot_line)
-        else:
-            container.setFixedHeight(24)
-            layout = QHBoxLayout(container)
-            layout.setContentsMargins(4, 0, 4, 0)
-            layout.setSpacing(4)
-
-            left_line = QLabel("———")
-            left_line.setFont(_load_pixel_font(5))
-            left_line.setStyleSheet("color: #000A14; background: transparent;")
-
-            label = QLabel(text)
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setFont(_load_pixel_font(5))
-            label.setStyleSheet("color: #000A14; background: transparent;")
-
-            right_line = QLabel("———")
-            right_line.setFont(_load_pixel_font(5))
-            right_line.setStyleSheet("color: #000A14; background: transparent;")
-
-            layout.addWidget(left_line)
-            layout.addWidget(label)
-            layout.addWidget(right_line)
-
+        layout.addWidget(left_line)
+        layout.addWidget(label)
+        layout.addWidget(right_line)
         return container
 
     # ── AppBar ────────────────────────────────────────────────────────────────
@@ -558,6 +549,8 @@ class DesktopWidget(QMainWindow):
                 card.set_season_avg(player.projected_points)
                 if player.name in self._live_data_cache:
                     card.set_live_data(self._live_data_cache[player.name])
+                else:
+                    card._refresh_display()  # force display update even without live data
 
         self._save_last_team_id(team_id)
         if self._current_matchup_data:
