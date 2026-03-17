@@ -10,6 +10,6 @@ How to find LeagueID, espn_s2 and SWID:
    
    then find the rows for espn_s2 and SWID,
    
-5. Copy and paste the items into their corresponding boxes in the SETUP page and click Save.
+5. Copy and paste the values into their corresponding boxes in the SETUP page and click Save.
    
    ** Note: SWID includes the {swirly brackets} **
