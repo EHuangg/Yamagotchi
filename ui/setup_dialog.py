@@ -11,7 +11,7 @@ from config_utils import SETTINGS_PATH
 import os
 
 FONT_PATH    = os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'pixel.ttf')
-COOKIE_HELP_URL = "https://github.com/cwendt94/espn-api/discussions/150"
+COOKIE_HELP_URL = "https://github.com/EHuangg/Yamagotchi/blob/main/README.md"
 
 
 def _load_pixel_font(size: int = 8) -> QFont:
@@ -262,7 +262,6 @@ class SetupDialog(QDialog):
         self._status.setStyleSheet("color: #a6e3a1;")
         self._status.setText("Connected!")
         self.accept()
-
 
 # ── Startup check ─────────────────────────────────────────────────────────────
 

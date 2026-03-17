@@ -41,7 +41,7 @@ label.setStyleSheet("color: white; font-size: 13px;")
 controls_layout.addWidget(label)
 
 combo = QComboBox()
-combo.addItems(["madeShot", "block", "idle"])
+combo.addItems(["madeShot", "missedShot", "missedShot_stitched", "block", "idle"])
 combo.setStyleSheet("""
     QComboBox {
         background-color: #000A14;
@@ -113,11 +113,45 @@ window.setCentralWidget(central)
 window.adjustSize()
 window.show()
 
+
+def _play_stitched_missed_shot(card: PlayerCard):
+    made_anim = sprite_loader.get_animation("madeShot")
+    missed_anim = sprite_loader.get_animation("missedShot")
+
+    made_pixmaps = sprite_loader.get_made_shot_frames(card.player_name, card._jersey)
+    missed_pixmaps = sprite_loader.get_missed_shot_frames()
+
+    made_indices = made_anim.get("frames", [])[:4]
+    missed_indices = missed_anim.get("frames", [])
+
+    stitched = []
+    for idx in made_indices:
+        if 0 <= idx < len(made_pixmaps):
+            stitched.append(made_pixmaps[idx])
+    for idx in missed_indices:
+        if 0 <= idx < len(missed_pixmaps):
+            stitched.append(missed_pixmaps[idx])
+
+    if not stitched:
+        card.animate("missedShot")
+        return
+
+    card._anim_timer.stop()
+    card._current_anim = "missedShot"
+    card._anim_pixmaps = stitched
+    card._frame_list = list(range(len(stitched)))
+    card._frame_index = 0
+
+    fps = missed_anim.get("fps", 6)
+    card._anim_timer.start(1000 // max(1, fps))
+
 def play_selected():
     anim = combo.currentText()
     for card in all_cards:
         if anim == "idle":
             card._start_idle()
+        elif anim == "missedShot_stitched":
+            _play_stitched_missed_shot(card)
         else:
             card.animate(anim)
 

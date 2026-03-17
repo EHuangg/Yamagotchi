@@ -466,7 +466,21 @@ class PlayerCard(QWidget):
         if animation_name == 'madeShot':
             self._anim_pixmaps = sprite_loader.get_made_shot_frames(self.player_name, self._jersey)
         elif animation_name == 'missedShot':
-            self._anim_pixmaps = sprite_loader.get_missed_shot_frames()
+            made_anim = sprite_loader.get_animation('madeShot')
+            made_pixmaps = sprite_loader.get_made_shot_frames(self.player_name, self._jersey)
+            missed_pixmaps = sprite_loader.get_missed_shot_frames()
+
+            stitched = []
+            for idx in made_anim.get('frames', [])[:4]:
+                if 0 <= idx < len(made_pixmaps):
+                    stitched.append(made_pixmaps[idx])
+
+            for idx in anim.get('frames', []):
+                if 0 <= idx < len(missed_pixmaps):
+                    stitched.append(missed_pixmaps[idx])
+
+            self._anim_pixmaps = stitched if stitched else missed_pixmaps
+            self._frame_list = list(range(len(self._anim_pixmaps)))
         elif animation_name == 'block':
             self._anim_pixmaps = sprite_loader.get_block_frames(self.player_name)
         else:
@@ -662,17 +676,26 @@ class PlayerCard(QWidget):
         self._scroll_pause_ticks = 0
         self._name_needs_scroll  = False
 
-    def _start_name_scroll(self):
+    def _start_name_scroll(self, force_reset: bool = False):
         fm          = self._name_label.fontMetrics()
         text_width  = fm.horizontalAdvance(self._name_label.text())
         label_width = self._name_label.width()
         if text_width > label_width:
+            scroll_max = text_width - label_width + NAME_LABEL_LEFT_PADDING
+            if (
+                not force_reset
+                and self._name_needs_scroll
+                and getattr(self, '_scroll_max', None) == scroll_max
+                and self._scroll_timer.isActive()
+            ):
+                return
+
             self._name_needs_scroll  = True
             self._scroll_offset      = self._scroll_min
             self._scroll_direction   = 1
             self._scroll_pausing     = False
             self._scroll_pause_ticks = 0
-            self._scroll_max         = text_width - label_width + NAME_LABEL_LEFT_PADDING
+            self._scroll_max         = scroll_max
             self._name_label.set_scroll_enabled(True)
             self._name_label.set_scroll_offset(self._scroll_offset)
             self._scroll_timer.start(NAME_SCROLL_FPS)
