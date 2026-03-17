@@ -53,7 +53,7 @@ class SpriteLoader:
                 self._animations = json.load(f)
         except Exception as e:
             print(f"[SpriteLoader] Could not load animations.json: {e}")
-            self._animations = {"idle": {"frames": [0,1,2,3,4,5], "fps": 3}}
+            self._animations = {"idle": {"frames": [0,4], "fps": 1}}
 
         # Load all pre-composited frames from flat structure
         frame_count = 0
@@ -138,7 +138,7 @@ class SpriteLoader:
         return self._frames.get(key, [])
 
     def get_animation(self, name: str) -> dict:
-        return self._animations.get(name, {"frames": [0,1,2,3,4,5], "fps": 3})
+        return self._animations.get(name, {"frames": [0,4], "fps": 1})
 
     def get_frame(self, frame_index: int):
         return None

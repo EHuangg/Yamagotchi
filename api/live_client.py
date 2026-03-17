@@ -97,6 +97,7 @@ class LiveClient:
                         'FTA': raw.get('freeThrowsAttempted',            0.0),
                         'PF':  raw.get('fouls',                          0.0),
                         'MIN': raw.get('minutes',                        0.0),
+                        'on_court': bool(athlete.get('active', False)),
                         'fantasy_pts': self._calc_fantasy(raw),
                     }
 

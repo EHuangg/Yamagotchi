@@ -10,13 +10,20 @@ FONT_PATH = os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'pi
 NAME_SCROLL_SPEED       = 1    # pixels per tick
 NAME_SCROLL_FPS         = 40   # ms per tick (lower = faster)
 NAME_SCROLL_PAUSE       = 75   # ticks to pause at each end (~3s at 40ms/tick)
-QUARTER_PULSE_INTERVAL  = 800  # ms between quarter bar pulse toggles
+GLOBAL_ANIMATION_TICK   = 800  # shared tick for pulse-driven UI
+OT_LABEL_SWITCH_TICKS   = 2    # switch OT label every 2 global ticks
+IDLE_FRAME_SWITCH_TICKS = 4    # advance idle frame every 4 global ticks
 
 
 class PlayerCard(QWidget):
     VIEWS = ['LIVE', 'AVERAGES', 'STATLINE']
     _current_view = 'LIVE'
     _all_cards: list = []
+    _global_animation_timer = None
+    _global_tick_count = 0
+    _shared_pulse_state = False
+    _shared_ot_label_show_text = True
+    _shared_idle_phase = 0
 
     def __init__(self, player_name: str, position: str, points: float = 0.0,
                  nba_team: str = "", injury_status: str = ""):
@@ -31,6 +38,7 @@ class PlayerCard(QWidget):
         self._live_data   = {}
         self._season_avg  = 0.0
         self._today_stats = {}
+        self._on_court    = False
 
         self._current_anim  = "idle"
         self._frame_list    = []
@@ -41,6 +49,7 @@ class PlayerCard(QWidget):
         self._fouls         = 0
         self._quarter       = 0
         self._ot_period     = 0
+        self._ot_label_show_text = True
         self._game_active   = False
         self._game_break    = False
         self._game_finished = False
@@ -52,16 +61,14 @@ class PlayerCard(QWidget):
         PlayerCard._all_cards.append(self)
         self.destroyed.connect(self._on_destroyed)
 
-        self._idle_timer = QTimer()
-        self._idle_timer.timeout.connect(self._tick_idle)
+        PlayerCard._ensure_global_animation_timer()
         self._start_idle()
 
         self._anim_timer = QTimer()
         self._anim_timer.timeout.connect(self._tick_anim)
 
-        self._quarter_pulse_state = False
-        self._quarter_pulse_timer = QTimer()
-        self._quarter_pulse_timer.timeout.connect(self._tick_quarter_pulse)
+        self._quarter_pulse_state = PlayerCard._shared_pulse_state
+        self._ot_label_show_text = PlayerCard._shared_ot_label_show_text
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(76, 94)
@@ -72,7 +79,7 @@ class PlayerCard(QWidget):
         QTimer.singleShot(100, self._start_name_scroll)
 
     def _on_destroyed(self):
-        for attr in ('_quarter_pulse_timer', '_scroll_timer', '_pulse_timer'):
+        for attr in ('_anim_timer', '_scroll_timer', '_pulse_timer'):
             try:
                 if hasattr(self, attr):
                     getattr(self, attr).stop()
@@ -83,6 +90,46 @@ class PlayerCard(QWidget):
                 PlayerCard._all_cards.remove(self)
         except Exception:
             pass
+        PlayerCard._stop_global_animation_timer_if_unused()
+
+    @classmethod
+    def _alive_cards(cls):
+        alive = []
+        for card in cls._all_cards:
+            try:
+                card._points_label.objectName()
+                alive.append(card)
+            except RuntimeError:
+                pass
+        cls._all_cards = alive
+        return alive
+
+    @classmethod
+    def _ensure_global_animation_timer(cls):
+        if cls._global_animation_timer is None:
+            cls._global_animation_timer = QTimer()
+            cls._global_animation_timer.timeout.connect(cls._on_global_animation_tick)
+        if not cls._global_animation_timer.isActive():
+            cls._global_animation_timer.start(GLOBAL_ANIMATION_TICK)
+
+    @classmethod
+    def _stop_global_animation_timer_if_unused(cls):
+        if cls._global_animation_timer and not cls._alive_cards():
+            cls._global_animation_timer.stop()
+
+    @classmethod
+    def _on_global_animation_tick(cls):
+        cls._shared_pulse_state = not cls._shared_pulse_state
+        cls._global_tick_count += 1
+
+        if cls._global_tick_count % OT_LABEL_SWITCH_TICKS == 0:
+            cls._shared_ot_label_show_text = not cls._shared_ot_label_show_text
+
+        if cls._global_tick_count % IDLE_FRAME_SWITCH_TICKS == 0:
+            cls._shared_idle_phase += 1
+
+        for card in cls._alive_cards():
+            card._apply_global_animation_state()
 
     # ── Font ──────────────────────────────────────────────────────────────────
 
@@ -129,9 +176,9 @@ class PlayerCard(QWidget):
         if self._injury_status in ('QUESTIONABLE', 'DAY_TO_DAY', 'PROBABLE'):
             return '#f38ba8'
         status = self._live_data.get('game_status', '')
-        if status == 'STATUS_IN_PROGRESS':
-            return '#a6e3a1'
-        elif status in ('STATUS_HALFTIME', 'STATUS_END_PERIOD', 'STATUS_INTERMISSION', 'STATUS_FINAL'):
+        if status in ('STATUS_IN_PROGRESS', 'STATUS_HALFTIME', 'STATUS_END_PERIOD', 'STATUS_INTERMISSION'):
+            return '#000000'
+        elif status == 'STATUS_FINAL':
             return '#000000'
         return '#868686'
 
@@ -163,16 +210,6 @@ class PlayerCard(QWidget):
         bar_x_right  = bg_rect.right() - 3 - bar_w
         bar_bottom_y = bg_rect.bottom() - 4
 
-        # ── OT label at top ───────────────────────────────────────────────────
-        if self._ot_period > 0:
-            ot_text = f"OT{self._ot_period}" if self._ot_period > 1 else "OT"
-            painter.setPen(QColor('#000A14'))
-            painter.setFont(_load_pixel_font(4))
-            painter.drawText(
-                QRect(bg_rect.left(), bg_rect.top() + 2, bg_rect.width(), 8),
-                Qt.AlignmentFlag.AlignCenter, ot_text
-            )
-
         # ── Left bars — fouls (red), bottom to top ────────────────────────────
         for i in range(6):
             bar_y = bar_bottom_y - i * (bar_h + bar_gap) - bar_h
@@ -182,27 +219,62 @@ class PlayerCard(QWidget):
                 painter.fillRect(rect, QColor(color))
 
         # ── Right bars — quarters (green), bottom to top ──────────────────────
-        for i in range(4):
-            bar_y   = bar_bottom_y - i * (bar_h + bar_gap) - bar_h
-            rect    = QRect(bar_x_right, bar_y, bar_w, bar_h)
-            quarter = i + 1
+        if self._ot_period > 0:
+            total_bars = 5
+            for i in range(total_bars):
+                bar_y = bar_bottom_y - i * (bar_h + bar_gap) - bar_h
+                rect = QRect(bar_x_right, bar_y, bar_w, bar_h)
+                is_ot_bar = i == total_bars - 1
 
-            if quarter < self._quarter:
-                painter.fillRect(rect, QColor('#a6e3a1'))
-            elif quarter == self._quarter:
-                if self._game_active:
-                    color = '#a6e3a1' if self._quarter_pulse_state else '#d4f0d4'
+                if is_ot_bar:
+                    if self._game_active:
+                        color = '#a6e3a1' if self._quarter_pulse_state else '#d4f0d4'
+                    else:
+                        color = '#a6e3a1'
+                    painter.fillRect(rect, QColor(color))
+
+                    ot_label = 'OT' if self._ot_label_show_text else str(self._ot_period)
+                    painter.setPen(QColor('#000A14'))
+                    painter.setFont(_load_pixel_font(5))
+                    label_rect = QRect(bar_x_right - 13, bar_y - 11, bar_w + 20, 10)
+                    painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, ot_label)
                 else:
-                    color = '#a6e3a1'  # solid during break
-                painter.fillRect(rect, QColor(color))
+                    painter.fillRect(rect, QColor('#a6e3a1'))
+        else:
+            for i in range(4):
+                bar_y   = bar_bottom_y - i * (bar_h + bar_gap) - bar_h
+                rect    = QRect(bar_x_right, bar_y, bar_w, bar_h)
+                quarter = i + 1
+
+                if quarter < self._quarter:
+                    painter.fillRect(rect, QColor('#a6e3a1'))
+                elif quarter == self._quarter:
+                    if self._game_active:
+                        color = '#a6e3a1' if self._quarter_pulse_state else '#d4f0d4'
+                    else:
+                        color = '#a6e3a1'
+                    painter.fillRect(rect, QColor(color))
 
         painter.end()
 
-    # ── Quarter pulse ─────────────────────────────────────────────────────────
+    # ── Shared animation clock ────────────────────────────────────────────────
 
-    def _tick_quarter_pulse(self):
-        self._quarter_pulse_state = not self._quarter_pulse_state
-        self.update()
+    def _apply_global_animation_state(self):
+        if self._game_active:
+            self._quarter_pulse_state = PlayerCard._shared_pulse_state
+        else:
+            self._quarter_pulse_state = False
+
+        if self._game_active and self._ot_period > 0:
+            self._ot_label_show_text = PlayerCard._shared_ot_label_show_text
+        else:
+            self._ot_label_show_text = True
+
+        if self._current_anim == 'idle':
+            self._apply_idle_frame()
+
+        if self._current_anim == 'idle' or self._game_active or self._ot_period > 0:
+            self.update()
 
     # ── Idle animation ────────────────────────────────────────────────────────
 
@@ -210,17 +282,23 @@ class PlayerCard(QWidget):
         anim = sprite_loader.get_animation("idle")
         self._idle_frame_indices = anim["frames"]
         self._idle_index = 0
-        fps = anim.get("fps", 6)
-        self._idle_pixmaps = sprite_loader.get_idle_frames(self.player_name, self._jersey)
-        self._idle_timer.start(1000 // fps)
+        raw_idle_pixmaps = sprite_loader.get_idle_frames(self.player_name, self._jersey)
+        self._idle_pixmaps = [
+            raw_idle_pixmaps[index]
+            for index in self._idle_frame_indices
+            if 0 <= index < len(raw_idle_pixmaps)
+        ]
+        self._current_anim = 'idle'
         if self._idle_pixmaps:
-            self._sprite_label.setPixmap(self._idle_pixmaps[0])
+            self._apply_idle_frame(force=True)
 
-    def _tick_idle(self):
+    def _apply_idle_frame(self, force: bool = False):
         if not self._idle_pixmaps:
             return
-        self._idle_index = (self._idle_index + 1) % len(self._idle_pixmaps)
-        self._sprite_label.setPixmap(self._idle_pixmaps[self._idle_index])
+        phase_index = PlayerCard._shared_idle_phase % len(self._idle_pixmaps)
+        if force or phase_index != self._idle_index:
+            self._idle_index = phase_index
+            self._sprite_label.setPixmap(self._idle_pixmaps[self._idle_index])
 
     # ── Event animation ───────────────────────────────────────────────────────
 
@@ -230,7 +308,6 @@ class PlayerCard(QWidget):
         self._frame_index  = 0
         self._current_anim = animation_name
         fps = anim.get("fps", 8)
-        self._idle_timer.stop()
 
         if animation_name == 'madeShot':
             self._anim_pixmaps = sprite_loader.get_made_shot_frames(self.player_name, self._jersey)
@@ -269,7 +346,12 @@ class PlayerCard(QWidget):
 
     def set_jersey(self, jersey: str):
         self._jersey = jersey
-        self._idle_pixmaps = sprite_loader.get_idle_frames(self.player_name, self._jersey)
+        raw_idle_pixmaps = sprite_loader.get_idle_frames(self.player_name, self._jersey)
+        self._idle_pixmaps = [
+            raw_idle_pixmaps[index]
+            for index in getattr(self, '_idle_frame_indices', [0, 4])
+            if 0 <= index < len(raw_idle_pixmaps)
+        ]
         self._idle_index = 0
 
     def update_points(self, new_points: float):
@@ -281,6 +363,7 @@ class PlayerCard(QWidget):
         self._live_data   = data
         self._today_stats = data
         self._fouls       = int(data.get('PF', 0))
+        self._on_court    = bool(data.get('on_court', False))
 
         status   = data.get('game_status', '')
         headline = data.get('game_headline', '')
@@ -292,12 +375,6 @@ class PlayerCard(QWidget):
 
         # debug
         print(f"[Card] {self.player_name} headline='{headline}' quarter={self._quarter} ot={self._ot_period} active={self._game_active} break={self._game_break}")
-
-        if self._game_active:
-            self._quarter_pulse_timer.start(QUARTER_PULSE_INTERVAL)
-        else:
-            self._quarter_pulse_timer.stop()
-            self._quarter_pulse_state = False
 
         self._quarter   = 0
         self._ot_period = 0
@@ -316,6 +393,9 @@ class PlayerCard(QWidget):
                     self._quarter = min(int(m.group(1)), 4)
                 elif self._game_finished:
                     self._quarter = 4
+
+        self._quarter_pulse_state = PlayerCard._shared_pulse_state if self._game_active else False
+        self._ot_label_show_text = PlayerCard._shared_ot_label_show_text if (self._game_active and self._ot_period > 0) else True
 
         if PlayerCard._current_view in ('LIVE', 'STATLINE'):
             self._refresh_display()
@@ -383,7 +463,16 @@ class PlayerCard(QWidget):
             text_color = '#000A14'
 
         self._points_label.setStyleSheet(f"color: {text_color}; background: transparent;")
-        self._name_label.setStyleSheet(f"color: {text_color}; background: transparent;")
+
+        if self._on_court and status == 'STATUS_IN_PROGRESS':
+            self._name_label.setStyleSheet(
+                f"color: {text_color};"
+                "background-color: #FFB347;"
+                "border: none;"
+                "border-radius: 2px;"
+            )
+        else:
+            self._name_label.setStyleSheet(f"color: {text_color}; background: transparent;")
 
         if mode == 'LIVE':
             if no_game:

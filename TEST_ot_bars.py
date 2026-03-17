@@ -21,7 +21,8 @@ from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QPainter, QColor, QPen, QFontDatabase, QFont
 
 FONT_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fonts', 'pixel.ttf')
-QUARTER_PULSE_INTERVAL = 800  # ms
+QUARTER_PULSE_INTERVAL = 1600  # ms
+OT_LABEL_SWITCH_INTERVAL = 3200  # ms
 
 
 def _load_pixel_font(size: int = 6) -> QFont:
@@ -56,16 +57,26 @@ class OTBarTestCard(QWidget):
         self._game_break  = game_break
         self._fouls       = fouls
         self._pulse_state = False
+        self._ot_label_show_text = True
 
         if game_active:
             self._pulse_timer = QTimer(self)
             self._pulse_timer.timeout.connect(self._tick_pulse)
             self._pulse_timer.start(QUARTER_PULSE_INTERVAL)
 
+            if ot_period > 0:
+                self._ot_label_timer = QTimer(self)
+                self._ot_label_timer.timeout.connect(self._tick_ot_label)
+                self._ot_label_timer.start(OT_LABEL_SWITCH_INTERVAL)
+
     # ── Pulse ─────────────────────────────────────────────────────────────────
 
     def _tick_pulse(self):
         self._pulse_state = not self._pulse_state
+        self.update()
+
+    def _tick_ot_label(self):
+        self._ot_label_show_text = not self._ot_label_show_text
         self.update()
 
     # ── Paint ─────────────────────────────────────────────────────────────────
@@ -126,11 +137,11 @@ class OTBarTestCard(QWidget):
                         color = '#a6e3a1'
                     painter.fillRect(rect, QColor(color))
 
-                    # Label above the OT bar:  "OT" for OT1, "2" / "3" etc. for later
-                    ot_label = str(self._ot_period) if self._ot_period > 1 else "OT"
+                    # Alternate between "OT" and the overtime count to keep it readable.
+                    ot_label = "OT" if self._ot_label_show_text else str(self._ot_period)
                     painter.setPen(QColor('#000A14'))
-                    painter.setFont(_load_pixel_font(4))
-                    label_rect = QRect(bar_x_right - 4, bar_y - 9, bar_w + 8, 8)
+                    painter.setFont(_load_pixel_font(5))
+                    label_rect = QRect(bar_x_right - 13, bar_y - 11, bar_w + 20, 10)
                     painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, ot_label)
                 else:
                     # All 4 regular quarter bars are fully completed → solid green
