@@ -18,6 +18,10 @@ class EventBus(QObject):
     # dict of {my_team, my_score, opp_team, opp_score, my_players, opp_players}
     matchup_updated = pyqtSignal(dict)
 
+    # Full league cache refresh signal
+    # dict of team_id -> {team_name, team_id, roster, matchup}
+    team_cache_updated = pyqtSignal(object)
+
     # reset cache signal
     daily_reset = pyqtSignal()
 

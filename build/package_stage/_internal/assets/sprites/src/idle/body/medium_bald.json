@@ -1,0 +1,24 @@
+{ "frames": {
+   "dark_bald.png": {
+    "frame": { "x": 0, "y": 0, "w": 96, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 16 },
+    "sourceSize": { "w": 96, "h": 16 },
+    "duration": 100
+   }
+ },
+ "meta": {
+  "app": "https://github.com/LibreSprite/LibreSprite/",
+  "version": "1.1-dev",
+  "image": "C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy Extension\\assets\\sprites\\src\\idle\\body\\medium_bald.png",
+  "format": "RGBA8888",
+  "size": { "w": 96, "h": 16 },
+  "scale": "1",
+  "frameTags": [
+  ],
+  "layers": [
+   { "name": "Layer", "opacity": 255, "blendMode": "normal" }
+  ]
+ }
+}

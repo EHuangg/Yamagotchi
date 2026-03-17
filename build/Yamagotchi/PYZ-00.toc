@@ -319,6 +319,10 @@
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\\Lib\\concurrent\\futures\\thread.py',
    'PYMODULE'),
+  ('config_utils',
+   'C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy '
+   'Extension\\config_utils.py',
+   'PYMODULE'),
   ('contextlib',
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\\Lib\\contextlib.py',
@@ -562,6 +566,10 @@
   ('ctypes.util',
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\\Lib\\ctypes\\util.py',
+   'PYMODULE'),
+  ('ctypes.wintypes',
+   'C:\\Program '
+   'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\\Lib\\ctypes\\wintypes.py',
    'PYMODULE'),
   ('dataclasses',
    'C:\\Program '
@@ -1336,21 +1344,20 @@
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\\Lib\\typing.py',
    'PYMODULE'),
   ('ui', '-', 'PYMODULE'),
+  ('ui.appbar',
+   'C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy Extension\\ui\\appbar.py',
+   'PYMODULE'),
   ('ui.desktop_widget',
    'C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy '
    'Extension\\ui\\desktop_widget.py',
-   'PYMODULE'),
-  ('ui.matchup_panel',
-   'C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy '
-   'Extension\\ui\\matchup_panel.py',
    'PYMODULE'),
   ('ui.player_card',
    'C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy '
    'Extension\\ui\\player_card.py',
    'PYMODULE'),
-  ('ui.roster_view',
+  ('ui.roster_view_shim',
    'C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy '
-   'Extension\\ui\\roster_view.py',
+   'Extension\\ui\\roster_view_shim.py',
    'PYMODULE'),
   ('ui.setup_dialog',
    'C:\\Users\\Evan\\Documents\\GitHub\\ESPN Fantasy '

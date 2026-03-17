@@ -109,7 +109,7 @@ class DesktopWidget(QMainWindow):
             Qt.WindowType.WindowStaysOnTopHint |
             Qt.WindowType.Tool
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
 
         self._live_data_cache = {}
         self._current_team_id = self._load_last_team_id()
@@ -133,7 +133,7 @@ class DesktopWidget(QMainWindow):
         self._players = players
 
         central = QWidget()
-        central.setStyleSheet("background-color: rgba(216, 226, 240, 200);")
+        central.setStyleSheet("background-color: #D8E2F0;")
         self.setCentralWidget(central)
 
         if self._is_horizontal():
@@ -146,7 +146,7 @@ class DesktopWidget(QMainWindow):
         # ── Scoreboard ────────────────────────────────────────────────────────
         self._score_widget = QWidget()
         self._score_widget.setStyleSheet(
-            "background-color: rgba(167, 194, 229, 200); border: none;"
+            "background-color: #A7C2E5; border: none;"
         )
         if self._is_horizontal():
             self._score_widget.setFixedWidth(110)
@@ -206,7 +206,7 @@ class DesktopWidget(QMainWindow):
             scroll.setStyleSheet("""
                 QScrollArea { border: none; background: transparent; }
                 QScrollBar:horizontal {
-                    background: rgba(167,194,229,100);
+                    background: #A7C2E5;
                     height: 4px;
                     border-radius: 2px;
                 }
@@ -223,7 +223,7 @@ class DesktopWidget(QMainWindow):
             scroll.setStyleSheet("""
                 QScrollArea { border: none; background: transparent; }
                 QScrollBar:vertical {
-                    background: rgba(167,194,229,100);
+                    background: #A7C2E5;
                     width: 4px;
                     border-radius: 2px;
                 }
@@ -253,7 +253,7 @@ class DesktopWidget(QMainWindow):
 
         # ── Nav buttons ───────────────────────────────────────────────────────
         nav_widget = QWidget()
-        nav_widget.setStyleSheet("background: rgba(167, 194, 229, 200); border: none;")
+        nav_widget.setStyleSheet("background: #A7C2E5; border: none;")
 
         if self._is_horizontal():
             nav_widget.setFixedWidth(28)
@@ -526,22 +526,49 @@ class DesktopWidget(QMainWindow):
         self._switch_to_team(self._current_team_id)
         self._update_nav_counter()
 
-    def _switch_to_team(self, team_id: int):
+    def _switch_to_team(self, team_id: int, force_rebuild: bool = False):
         if not self._team_cache:
             return
         data = self._team_cache.get_team(team_id)
         if not data:
             return
 
+        old_players = list(self._players)
         self._current_team_id = team_id
         players = data['full_snapshot']
         self._players = players
 
-        old_player_ids = set(self._cards.keys())
-        new_player_ids = set(p.player_id for p in players)
+        old_player_ids = [p.player_id for p in old_players]
+        new_player_ids = [p.player_id for p in players]
+        old_player_id_set = set(old_player_ids)
+        new_player_id_set = set(new_player_ids)
 
-        if old_player_ids != new_player_ids:
+        old_slot_by_id = {p.player_id: getattr(p, 'lineup_slot', '') for p in old_players}
+        new_slot_by_id = {p.player_id: getattr(p, 'lineup_slot', '') for p in players}
+        old_avg_by_id = {p.player_id: getattr(p, 'projected_points', 0.0) for p in old_players}
+        new_avg_by_id = {p.player_id: getattr(p, 'projected_points', 0.0) for p in players}
+        old_injury_by_id = {p.player_id: getattr(p, 'injury_status', '') for p in old_players}
+        new_injury_by_id = {p.player_id: getattr(p, 'injury_status', '') for p in players}
+        moved_player_ids = {
+            pid for pid in (old_player_id_set & new_player_id_set)
+            if old_slot_by_id.get(pid) != new_slot_by_id.get(pid)
+        }
+
+        order_changed = old_player_ids != new_player_ids
+        slots_changed = any(old_slot_by_id.get(pid) != new_slot_by_id.get(pid) for pid in new_player_id_set)
+        roster_changed = old_player_id_set != new_player_id_set or order_changed or slots_changed
+
+        if force_rebuild or roster_changed:
             self._build_player_rows(players)
+
+        changed_player_ids = {
+            pid for pid in (old_player_id_set & new_player_id_set)
+            if (
+                old_avg_by_id.get(pid) != new_avg_by_id.get(pid)
+                or old_injury_by_id.get(pid) != new_injury_by_id.get(pid)
+                or pid in moved_player_ids
+            )
+        }
 
         for player in players:
             card = self._cards.get(player.player_id)
@@ -549,8 +576,13 @@ class DesktopWidget(QMainWindow):
                 card.set_season_avg(player.projected_points)
                 if player.name in self._live_data_cache:
                     card.set_live_data(self._live_data_cache[player.name])
-                else:
+                elif player.player_id in changed_player_ids:
                     card._refresh_display()  # force display update even without live data
+
+        for pid in moved_player_ids:
+            card = self._cards.get(pid)
+            if card:
+                card.flash_position_change_indicator()
 
         self._save_last_team_id(team_id)
         if self._current_matchup_data:

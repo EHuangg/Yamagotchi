@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout
-from PyQt6.QtCore import Qt, QTimer, QPoint, QRect
+from PyQt6.QtCore import Qt, QTimer, QPoint, QRect, QVariantAnimation
 from PyQt6.QtGui import QFontDatabase, QFont, QPainter, QColor, QPen, QBrush
 from ui.sprite_loader import sprite_loader, get_jersey_for_team, _clean_player_name
 import os
@@ -15,6 +15,13 @@ NAME_LABEL_ROW_OFFSET   = 7    # shifts the whole name track right within the ca
 GLOBAL_ANIMATION_TICK   = 800  # shared tick for pulse-driven UI
 OT_LABEL_SWITCH_TICKS   = 2    # switch OT label every 2 global ticks
 IDLE_FRAME_SWITCH_TICKS = 4    # advance idle frame every 4 global ticks
+POSITION_FLASH_FADE_IN_MS = 500
+POSITION_FLASH_HOLD_MS = 3000
+POSITION_FLASH_FADE_OUT_MS = 500
+POSITION_FLASH_DURATION_MS = (
+    POSITION_FLASH_FADE_IN_MS + POSITION_FLASH_HOLD_MS + POSITION_FLASH_FADE_OUT_MS
+)
+POSITION_FLASH_COLOR = "#62d26f"
 
 
 class SlidingNameLabel(QLabel):
@@ -110,6 +117,10 @@ class PlayerCard(QWidget):
 
         self._quarter_pulse_state = PlayerCard._shared_pulse_state
         self._ot_label_show_text = PlayerCard._shared_ot_label_show_text
+
+        self._border_override_color = None
+        self._position_flash_anim = None
+        self._position_flash_base_color = QColor('#000000')
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(90, 94)
@@ -220,6 +231,9 @@ class PlayerCard(QWidget):
     # ── Border ────────────────────────────────────────────────────────────────
 
     def get_border_color(self) -> str:
+        if self._border_override_color is not None:
+            return self._border_override_color.name()
+
         if self._injury_status in ('OUT', 'DOUBTFUL', 'INJURY_RESERVE'):
             return "#cf2354"
         if self._injury_status in ('QUESTIONABLE', 'DAY_TO_DAY', 'PROBABLE'):
@@ -230,6 +244,53 @@ class PlayerCard(QWidget):
         elif status == 'STATUS_FINAL':
             return '#000000'
         return '#868686'
+
+    @staticmethod
+    def _lerp_color(c1: QColor, c2: QColor, t: float) -> QColor:
+        t = max(0.0, min(1.0, t))
+        r = int(c1.red() + (c2.red() - c1.red()) * t)
+        g = int(c1.green() + (c2.green() - c1.green()) * t)
+        b = int(c1.blue() + (c2.blue() - c1.blue()) * t)
+        return QColor(r, g, b)
+
+    def flash_position_change_indicator(self):
+        base = QColor(self.get_border_color())
+        accent = QColor(POSITION_FLASH_COLOR)
+        self._position_flash_base_color = base
+
+        fade_in_end = POSITION_FLASH_FADE_IN_MS / POSITION_FLASH_DURATION_MS
+        hold_end = (POSITION_FLASH_FADE_IN_MS + POSITION_FLASH_HOLD_MS) / POSITION_FLASH_DURATION_MS
+
+        if self._position_flash_anim is None:
+            self._position_flash_anim = QVariantAnimation(self)
+            self._position_flash_anim.setDuration(POSITION_FLASH_DURATION_MS)
+            self._position_flash_anim.setStartValue(0.0)
+            self._position_flash_anim.setEndValue(1.0)
+
+            def _on_value(value):
+                t = float(value)
+                if t <= fade_in_end:
+                    local_t = t / max(fade_in_end, 1e-9)
+                    color = self._lerp_color(self._position_flash_base_color, accent, local_t)
+                elif t <= hold_end:
+                    color = accent
+                else:
+                    local_t = (t - hold_end) / max((1.0 - hold_end), 1e-9)
+                    color = self._lerp_color(accent, self._position_flash_base_color, local_t)
+                self._border_override_color = color
+                self.update()
+
+            def _on_finished():
+                self._border_override_color = None
+                self.update()
+
+            self._position_flash_anim.valueChanged.connect(_on_value)
+            self._position_flash_anim.finished.connect(_on_finished)
+
+        if self._position_flash_anim.state() == QVariantAnimation.State.Running:
+            self._position_flash_anim.stop()
+
+        self._position_flash_anim.start()
 
     def _get_injury_side_label(self):
         if self._injury_status in ('OUT', 'INJURY_RESERVE'):

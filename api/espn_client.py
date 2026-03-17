@@ -16,17 +16,21 @@ class ESPNClient:
         cfg = self._settings["espn"]
         if not cfg["league_id"] or not cfg["espn_s2"] or not cfg["swid"]:
             raise ValueError("ESPN credentials are missing from settings.json")
+        self._refresh_league_context()
+        # Default to last viewed team or team_id 1
+        last_id = cfg.get("last_viewed_team_id", 1)
+        self.my_team = self._get_team_by_id(last_id) or self.league.teams[0]
+        print(f"Connected! Found team: {self.my_team.team_name}")
+        return self.my_team
+
+    def _refresh_league_context(self):
+        cfg = self._settings["espn"]
         self.league = League(
             league_id=cfg["league_id"],
             year=cfg["year"],
             espn_s2=cfg["espn_s2"],
             swid=cfg["swid"]
         )
-        # Default to last viewed team or team_id 1
-        last_id = cfg.get("last_viewed_team_id", 1)
-        self.my_team = self._get_team_by_id(last_id) or self.league.teams[0]
-        print(f"Connected! Found team: {self.my_team.team_name}")
-        return self.my_team
 
     def _get_team_by_id(self, team_id: int):
         for team in self.league.teams:
@@ -46,6 +50,8 @@ class ESPNClient:
             }
         }
         """
+        self._refresh_league_context()
+
         all_data = {}
         box_scores = None
         try:
@@ -97,12 +103,7 @@ class ESPNClient:
 
     def get_fresh_roster(self):
         cfg = self._settings["espn"]
-        self.league = League(
-            league_id=cfg["league_id"],
-            year=cfg["year"],
-            espn_s2=cfg["espn_s2"],
-            swid=cfg["swid"]
-        )
+        self._refresh_league_context()
         self.my_team = self._get_team_by_id(
             cfg.get("last_viewed_team_id", 1)
         ) or self.league.teams[0]

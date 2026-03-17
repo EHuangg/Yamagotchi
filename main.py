@@ -1,6 +1,7 @@
 import sys
 import os
 import signal
+import json
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import QTimer, qInstallMessageHandler
 from PyQt6.QtGui import QIcon, QAction
@@ -9,6 +10,7 @@ from ui.desktop_widget import DesktopWidget, BAR_THICKNESS
 from ui.setup_dialog import check_and_run_setup
 from ui.sprite_loader import sprite_loader
 from ui.appbar import AppBar
+from config_utils import SETTINGS_PATH
 
 from api.espn_client import ESPNClient
 from api.live_client import LiveClient
@@ -203,7 +205,36 @@ def main():
                 event_bus.matchup_updated.emit(current)
 
     event_bus.live_stats_updated.connect(on_live_stats_updated)
-    event_bus.daily_reset.connect(lambda: widget._live_data_cache.clear())
+
+    def on_team_cache_updated(all_teams_data: dict):
+        if not all_teams_data:
+            return
+
+        team_cache.refresh(all_teams_data)
+        widget.set_team_cache(team_cache)
+
+        all_names = []
+        for tid in team_cache.all_team_ids:
+            team_data = team_cache.get_team(tid)
+            all_names.extend([p.name for p in team_data.get('full_snapshot', [])])
+        live_poller.update_roster_names(list(set(all_names)))
+
+    def on_daily_reset():
+        widget._live_data_cache.clear()
+        for _, card in list(widget._cards.items()):
+            try:
+                card.set_live_data({})
+            except RuntimeError:
+                pass
+
+        if widget._current_matchup_data:
+            reset_matchup = dict(widget._current_matchup_data)
+            reset_matchup['my_score'] = 0.0
+            reset_matchup['opp_score'] = 0.0
+            event_bus.matchup_updated.emit(reset_matchup)
+
+    event_bus.team_cache_updated.connect(on_team_cache_updated)
+    event_bus.daily_reset.connect(on_daily_reset)
 
     app.aboutToQuit.connect(poller.stop)
     app.aboutToQuit.connect(live_poller.stop)

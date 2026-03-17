@@ -1,5 +1,6 @@
 import json
 import webbrowser
+from datetime import datetime
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton
@@ -221,13 +222,23 @@ class SetupDialog(QDialog):
         self._status.setStyleSheet("color: #a6e3a1;")
         self._status.setText("Connecting to ESPN...")
 
+        # Handle first-run packaged settings where config may be {}.
         try:
-            from espn_api.basketball import League
             with open(SETTINGS_PATH) as f:
                 settings = json.load(f)
+                if not isinstance(settings, dict):
+                    settings = {}
+        except Exception:
+            settings = {}
+
+        espn_cfg = settings.setdefault("espn", {})
+        year = int(espn_cfg.get("year", datetime.now().year))
+
+        try:
+            from espn_api.basketball import League
             League(
                 league_id=int(league_id),
-                year=settings["espn"]["year"],
+                year=year,
                 espn_s2=espn_s2,
                 swid=swid
             )
@@ -237,11 +248,10 @@ class SetupDialog(QDialog):
             return
 
         try:
-            with open(SETTINGS_PATH) as f:
-                settings = json.load(f)
-            settings["espn"]["league_id"] = int(league_id)
-            settings["espn"]["espn_s2"]   = espn_s2
-            settings["espn"]["swid"]      = swid
+            espn_cfg["year"] = year
+            espn_cfg["league_id"] = int(league_id)
+            espn_cfg["espn_s2"]   = espn_s2
+            espn_cfg["swid"]      = swid
             with open(SETTINGS_PATH, 'w') as f:
                 json.dump(settings, f, indent=2)
         except Exception as e:

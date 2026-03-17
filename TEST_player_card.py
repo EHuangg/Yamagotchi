@@ -18,7 +18,7 @@ import sys
 import os
 
 from PyQt6.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel
-from PyQt6.QtCore import Qt, QTimer, QRect, QPoint
+from PyQt6.QtCore import Qt, QTimer, QRect, QPoint, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPen, QFontDatabase, QFont, QBrush
 
 FONT_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fonts', 'pixel.ttf')
@@ -62,7 +62,8 @@ class PlayerCardTestCard(QWidget):
     _instances:    list          = []
 
     def __init__(self, label: str, quarter: int, ot_period: int,
-                 game_active: bool, game_break: bool, fouls: int = 2):
+                 game_active: bool, game_break: bool, fouls: int = 2,
+                 injury_status: str = ""):
         super().__init__()
         self.setFixedSize(WIDGET_W, WIDGET_H)
 
@@ -71,6 +72,8 @@ class PlayerCardTestCard(QWidget):
         self._game_active = game_active
         self._game_break  = game_break
         self._fouls       = fouls
+        self._injury_status = injury_status.upper().strip()
+        self._border_phase = 0
 
         # Shared animation state (driven by global tick)
         self._pulse_state        = False
@@ -95,6 +98,9 @@ class PlayerCardTestCard(QWidget):
         shared_pulse = bool(t % 2)
         shared_ot    = bool((t // OT_LABEL_SWITCH_TICKS) % 2 == 0)
         for card in list(cls._instances):
+            card._border_phase = t
+            if card._injury_status in {"OUT", "INJURY_RESERVE", "DTD", "DAY_TO_DAY"}:
+                card.update()
             if card._game_active:
                 card._pulse_state        = shared_pulse
                 card._ot_label_show_text = shared_ot
@@ -102,6 +108,51 @@ class PlayerCardTestCard(QWidget):
             elif card._game_break and card._ot_period > 0:
                 card._ot_label_show_text = shared_ot
                 card.update()
+
+    def _injury_border_config(self) -> tuple[str | None, str | None]:
+        if self._injury_status in {"OUT", "INJURY_RESERVE"}:
+            return "O", "#cf2354"
+        if self._injury_status in {"DTD", "DAY_TO_DAY"}:
+            return "DTD", "#f38ba8"
+        return None, None
+
+    def _draw_rotating_text_border(self, p: QPainter, bg: QRect, text: str, color: str) -> None:
+        # Build clockwise anchor points around the rectangle perimeter.
+        step = 8
+        pts: list[tuple[QPoint, int]] = []
+
+        for x in range(bg.left() + 4, bg.right() - 3, step):
+            pts.append((QPoint(x, bg.top() + 1), 0))
+        for y in range(bg.top() + 4, bg.bottom() - 3, step):
+            pts.append((QPoint(bg.right() - 1, y), 90))
+        for x in range(bg.right() - 4, bg.left() + 3, -step):
+            pts.append((QPoint(x, bg.bottom() - 1), 180))
+        for y in range(bg.bottom() - 4, bg.top() + 3, -step):
+            pts.append((QPoint(bg.left() + 1, y), -90))
+
+        if not pts:
+            return
+
+        p.save()
+        p.setFont(_load_pixel_font(5))
+        p.setPen(QColor(color))
+
+        token = text
+        token_w = max(10, p.fontMetrics().horizontalAdvance(token) + 1)
+        token_h = 8
+
+        # Shift token placement each tick so the border text rotates clockwise.
+        offset = self._border_phase % len(pts)
+        for i in range(len(pts)):
+            pt, angle = pts[(i + offset) % len(pts)]
+            p.save()
+            p.translate(QPointF(pt))
+            p.rotate(angle)
+            rect = QRect(-token_w // 2, -token_h // 2, token_w, token_h)
+            p.drawText(rect, Qt.AlignmentFlag.AlignCenter, token)
+            p.restore()
+
+        p.restore()
 
     # ── Paint ─────────────────────────────────────────────────────────────────
 
@@ -123,9 +174,14 @@ class PlayerCardTestCard(QWidget):
         else:
             border_col = '#868686'
 
+        injury_text, injury_color = self._injury_border_config()
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(QPen(QColor(border_col), 2))
-        p.drawRoundedRect(bg, 8, 8)
+        if injury_text:
+            # Injury experiment: replace line border with rotating text border.
+            self._draw_rotating_text_border(p, bg, injury_text, injury_color)
+        else:
+            p.setPen(QPen(QColor(border_col), 2))
+            p.drawRoundedRect(bg, 8, 8)
 
         if not (self._game_active or self._game_break):
             p.end()
@@ -251,6 +307,8 @@ class TestWindow(QWidget):
             dict(label="OT1\nBreak",           quarter=4, ot_period=1, game_active=False, game_break=True,  fouls=1),
             dict(label="OT2\nActive",          quarter=4, ot_period=2, game_active=True,  game_break=False, fouls=3),
             dict(label="OT3\nBreak",           quarter=4, ot_period=3, game_active=False, game_break=True,  fouls=0),
+            dict(label="OUT Border\nClockwise", quarter=2, ot_period=0, game_active=True,  game_break=False, fouls=2, injury_status="OUT"),
+            dict(label="DTD Border\nClockwise", quarter=2, ot_period=0, game_active=True,  game_break=False, fouls=2, injury_status="DTD"),
         ]
 
         for case in cases:
