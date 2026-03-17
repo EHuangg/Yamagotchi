@@ -739,7 +739,7 @@ class DesktopWidget(QMainWindow):
                 names = []
                 for tid in self._team_cache.all_team_ids:
                     td = self._team_cache.get_team(tid)
-                    names.extend([p.name for p in td.get('snapshot', [])])
+                    names.extend([p.name for p in td.get('full_snapshot', [])])
                 self.live_poller.update_roster_names(list(set(names)))
         except Exception as e:
             print(f"[DesktopWidget] Reload failed: {e}")

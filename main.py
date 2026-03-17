@@ -65,7 +65,7 @@ def main():
     all_roster_names = []
     for team_id in team_cache.all_team_ids:
         team_data = team_cache.get_team(team_id)
-        all_roster_names.extend([p.name for p in team_data.get('snapshot', [])])
+        all_roster_names.extend([p.name for p in team_data.get('full_snapshot', [])])
     all_roster_names = list(set(all_roster_names))
     print(f"Tracking {len(all_roster_names)} players across all teams")
 
@@ -181,14 +181,25 @@ def main():
                         break
                 except RuntimeError:
                     pass
-        # Update scoreboard scores
+        # Update scoreboard scores using live data where available
         current = widget._current_matchup_data
         if current and current.get('my_team_id'):
             my_data  = team_cache.get_team(current['my_team_id'])
             opp_data = team_cache.get_team(current.get('opp_team_id'))
             if my_data and opp_data:
-                current['my_score']  = my_data['matchup'].get('my_score', current['my_score'])
-                current['opp_score'] = my_data['matchup'].get('opp_score', current['opp_score'])
+                def _calc_score(matchup_players):
+                    if not matchup_players:
+                        return None
+                    total = 0.0
+                    for name, base_pts in matchup_players:
+                        live = widget._live_data_cache.get(name, {})
+                        total += live.get('fantasy_pts', base_pts) if live else base_pts
+                    return total
+
+                my_score  = _calc_score(my_data['matchup'].get('my_players',  []))
+                opp_score = _calc_score(opp_data['matchup'].get('my_players', []))
+                if my_score  is not None: current['my_score']  = my_score
+                if opp_score is not None: current['opp_score'] = opp_score
                 event_bus.matchup_updated.emit(current)
 
     event_bus.live_stats_updated.connect(on_live_stats_updated)

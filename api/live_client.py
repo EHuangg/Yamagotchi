@@ -142,27 +142,18 @@ class LiveClient:
         roster_names: list[str],
         games: list[dict]
     ) -> dict[str, dict]:
-        """
-        Fetches box scores for all today's games and filters
-        to only return stats for players on the user's roster.
-        Returns dict of player_name → stats dict.
-        """
-        print(f"[LiveClient] Looking up: {name}, found game: {game is not None}")
-
-        
         roster_set = set(roster_names)
         all_stats  = {}
 
         for game in games:
-            game_id = game['game_id']
             if game['status'] == 'STATUS_SCHEDULED':
-                continue  # Don't fetch games that haven't started
-
-            stats = self.get_live_stats(game_id)
+                continue
+            stats = self.get_live_stats(game['game_id'])
             for name, data in stats.items():
                 if name in roster_set:
-                    data['game_status'] = game['status']
-                    data['game_headline'] = game['headline']
+                    data['game_status']    = game['status']
+                    data['game_headline']  = game['headline']
+                    data['has_game_today'] = True
                     all_stats[name] = data
 
         return all_stats

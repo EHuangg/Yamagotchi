@@ -265,7 +265,6 @@ def check_and_run_setup():
             cfg.get("league_id"),
             cfg.get("espn_s2"),
             cfg.get("swid"),
-            cfg.get("my_team_id")
         ])
         if has_creds:
             return True

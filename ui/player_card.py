@@ -42,6 +42,7 @@ class PlayerCard(QWidget):
         self._quarter       = 0
         self._ot_period     = 0
         self._game_active   = False
+        self._game_break    = False
         self._game_finished = False
 
         self._setup_font()
@@ -128,11 +129,11 @@ class PlayerCard(QWidget):
         if self._injury_status in ('QUESTIONABLE', 'DAY_TO_DAY', 'PROBABLE'):
             return '#f38ba8'
         status = self._live_data.get('game_status', '')
-        if status in ('STATUS_IN_PROGRESS', 'STATUS_HALFTIME'):
+        if status == 'STATUS_IN_PROGRESS':
             return '#a6e3a1'
-        elif status == 'STATUS_FINAL':
-            return "#000000"
-        return "#868686"
+        elif status in ('STATUS_HALFTIME', 'STATUS_END_PERIOD', 'STATUS_INTERMISSION', 'STATUS_FINAL'):
+            return '#000000'
+        return '#868686'
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -149,8 +150,8 @@ class PlayerCard(QWidget):
         bg_rect = QRect(x, y, 72, 90).adjusted(1, 1, -1, -1)
         painter.drawRoundedRect(bg_rect, 8, 8)
 
-        # Only draw bars if game is actively in progress
-        if not self._game_active:
+        # Draw bars if game is active or in a break between periods
+        if not (self._game_active or self._game_break):
             painter.end()
             return
 
@@ -189,7 +190,10 @@ class PlayerCard(QWidget):
             if quarter < self._quarter:
                 painter.fillRect(rect, QColor('#a6e3a1'))
             elif quarter == self._quarter:
-                color = '#a6e3a1' if self._quarter_pulse_state else '#d4f0d4'
+                if self._game_active:
+                    color = '#a6e3a1' if self._quarter_pulse_state else '#d4f0d4'
+                else:
+                    color = '#a6e3a1'  # solid during break
                 painter.fillRect(rect, QColor(color))
 
         painter.end()
@@ -274,9 +278,6 @@ class PlayerCard(QWidget):
             self._refresh_display()
 
     def set_live_data(self, data: dict):
-        # debug
-        print(f"[Card] {self.player_name} status={data.get('game_status')} fpts={data.get('fantasy_pts')} injury={self._injury_status}")
-        
         self._live_data   = data
         self._today_stats = data
         self._fouls       = int(data.get('PF', 0))
@@ -284,8 +285,13 @@ class PlayerCard(QWidget):
         status   = data.get('game_status', '')
         headline = data.get('game_headline', '')
 
-        self._game_active   = status in ('STATUS_IN_PROGRESS', 'STATUS_HALFTIME')
+        _BREAK_STATUSES     = {'STATUS_HALFTIME', 'STATUS_END_PERIOD', 'STATUS_INTERMISSION'}
+        self._game_active   = status == 'STATUS_IN_PROGRESS'
+        self._game_break    = status in _BREAK_STATUSES
         self._game_finished = status == 'STATUS_FINAL'
+
+        # debug
+        print(f"[Card] {self.player_name} headline='{headline}' quarter={self._quarter} ot={self._ot_period} active={self._game_active} break={self._game_break}")
 
         if self._game_active:
             self._quarter_pulse_timer.start(QUARTER_PULSE_INTERVAL)
@@ -295,13 +301,15 @@ class PlayerCard(QWidget):
 
         self._quarter   = 0
         self._ot_period = 0
-        if self._game_active or self._game_finished:
+        if self._game_active or self._game_finished or self._game_break:
             import re
             h = headline.upper()
             if 'OT' in h:
                 m = re.search(r'(\d*)OT', h)
                 self._ot_period = int(m.group(1)) if m and m.group(1) else 1
                 self._quarter   = 4
+            elif status == 'STATUS_HALFTIME':
+                self._quarter = 2
             else:
                 m = re.search(r'(\d+)(?:ST|ND|RD|TH)', h)
                 if m:
@@ -353,7 +361,10 @@ class PlayerCard(QWidget):
         mode   = PlayerCard._current_view
         fpts   = self._live_data.get('fantasy_pts', None)
         status = self._live_data.get('game_status', '')
-        ACTIVE_STATUSES = {'STATUS_IN_PROGRESS', 'STATUS_HALFTIME'}
+        ACTIVE_STATUSES = {
+            'STATUS_IN_PROGRESS', 'STATUS_HALFTIME',
+            'STATUS_END_PERIOD', 'STATUS_INTERMISSION',
+        }
 
         no_game    = fpts is None or status == ''
         is_injured = self._injury_status in (
@@ -391,8 +402,7 @@ class PlayerCard(QWidget):
             pts = self._today_stats.get('PTS', 0)
             reb = self._today_stats.get('REB', 0)
             ast = self._today_stats.get('AST', 0)
-            pf  = self._today_stats.get('PF',  0)
-            self._points_label.setText(f"{int(pts)}/{int(reb)}/{int(ast)}/{int(pf)}")
+            self._points_label.setText(f"{int(pts)}/{int(reb)}/{int(ast)}")
 
         # Name label text
         if is_injured:
@@ -401,10 +411,7 @@ class PlayerCard(QWidget):
             else:
                 self._name_label.setText(self._short_name + " DTD")
         elif status in ACTIVE_STATUSES:
-            self._name_label.setText(
-                self._short_name if status == 'STATUS_IN_PROGRESS'
-                else self._short_name + " ⏸"
-            )
+            self._name_label.setText(self._short_name)
         else:
             self._name_label.setText(self._short_name)
 

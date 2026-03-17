@@ -108,7 +108,12 @@ class AnimationTrigger:
             card = self.roster_view.get_card(player.player_id)
             if not card:
                 continue
-    
+
+            # Update injury status if it changed so DTD/O tags stay current
+            new_status = (player.injury_status or '').upper()
+            if new_status != card._injury_status:
+                card._injury_status = new_status
+                card._refresh_display()
     def _handle_live_stats(self, stats: dict):
         name_to_card = {}
         for player_id, card in self.roster_view._cards.items():
