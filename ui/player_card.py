@@ -258,6 +258,16 @@ class PlayerCard(QWidget):
         painter.setPen(QPen(QColor(self.get_border_color()), 2))
         painter.drawRoundedRect(bg_rect, 8, 8)
 
+        # Injury side tag is always shown when present (independent of bar visibility).
+        injury_label, injury_color = self._get_injury_side_label()
+        if injury_label:
+            painter.save()
+            painter.setFont(_load_pixel_font(5))
+            painter.setPen(QColor(injury_color))
+            injury_rect = QRect(bg_rect.left() + 4, bg_rect.top() + 2, 22, 8)
+            painter.drawText(injury_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, injury_label)
+            painter.restore()
+
         # Draw indicators only when game is live or in a break between periods
         if not (self._game_active or self._game_break):
             painter.end()
@@ -285,16 +295,6 @@ class PlayerCard(QWidget):
         painter.rotate(-90)
         painter.drawText(QRect(-18, -4, 36, 8), Qt.AlignmentFlag.AlignCenter, 'FLS')
         painter.restore()
-
-        injury_label, injury_color = self._get_injury_side_label()
-        if injury_label:
-            painter.save()
-            painter.setFont(_load_pixel_font(5))
-            painter.setPen(QColor(injury_color))
-            painter.translate(left_cx, bg_rect.top() + 14)
-            painter.rotate(-90)
-            painter.drawText(QRect(-18, -4, 36, 8), Qt.AlignmentFlag.AlignCenter, injury_label)
-            painter.restore()
 
         # ── Rotated "QTR" label — right padding strip ─────────────────────────
         painter.save()
@@ -548,7 +548,9 @@ class PlayerCard(QWidget):
         print(f"[Refresh] {self.player_name} no_game={no_game} injured={is_injured} status={status} fpts={fpts}")
 
         
-        if is_injured:
+        if self._injury_status in ('OUT', 'INJURY_RESERVE'):
+            text_color = '#cf2354'
+        elif is_injured:
             text_color = '#f38ba8'
         elif no_game:
             text_color = '#929EAF'
