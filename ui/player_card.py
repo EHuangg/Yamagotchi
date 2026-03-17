@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFontDatabase, QFont, QPainter, QColor, QPen
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout
+from PyQt6.QtCore import Qt, QTimer, QPoint, QRect
+from PyQt6.QtGui import QFontDatabase, QFont, QPainter, QColor, QPen, QBrush
 from ui.sprite_loader import sprite_loader, get_jersey_for_team, _clean_player_name
 import os
 
@@ -10,9 +10,50 @@ FONT_PATH = os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'pi
 NAME_SCROLL_SPEED       = 1    # pixels per tick
 NAME_SCROLL_FPS         = 40   # ms per tick (lower = faster)
 NAME_SCROLL_PAUSE       = 75   # ticks to pause at each end (~3s at 40ms/tick)
+NAME_LABEL_LEFT_PADDING = 12   # marquee start boundary for long names
+NAME_LABEL_ROW_OFFSET   = 7    # shifts the whole name track right within the card
 GLOBAL_ANIMATION_TICK   = 800  # shared tick for pulse-driven UI
 OT_LABEL_SWITCH_TICKS   = 2    # switch OT label every 2 global ticks
 IDLE_FRAME_SWITCH_TICKS = 4    # advance idle frame every 4 global ticks
+
+
+class SlidingNameLabel(QLabel):
+    def __init__(self, text: str = ""):
+        super().__init__(text)
+        self._scroll_enabled = False
+        self._scroll_offset = 0
+        self._text_color = QColor('#000A14')
+        self.setStyleSheet("background: transparent;")
+
+    def set_scroll_enabled(self, enabled: bool):
+        self._scroll_enabled = enabled
+        self.update()
+
+    def set_scroll_offset(self, offset: int):
+        self._scroll_offset = offset
+        self.update()
+
+    def set_text_color(self, color):
+        self._text_color = QColor(color)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+        painter.setClipRect(self.rect())
+        painter.setFont(self.font())
+        painter.setPen(self._text_color)
+
+        text = self.text()
+        text_width = self.fontMetrics().horizontalAdvance(text)
+
+        if self._scroll_enabled and text_width > self.width():
+            text_x = NAME_LABEL_LEFT_PADDING - int(self._scroll_offset)
+        else:
+            text_x = max(0, (self.width() - text_width) // 2)
+
+        text_rect = QRect(text_x, 0, max(self.width(), text_width), self.height())
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
 
 
 class PlayerCard(QWidget):
@@ -71,7 +112,7 @@ class PlayerCard(QWidget):
         self._ot_label_show_text = PlayerCard._shared_ot_label_show_text
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(76, 94)
+        self.setFixedSize(90, 94)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def showEvent(self, event):
@@ -151,11 +192,19 @@ class PlayerCard(QWidget):
         self._sprite_label.setFixedSize(64, 64)
         self._sprite_label.setStyleSheet("background: transparent;")
 
-        self._name_label = QLabel(self._short_name)
+        self._name_label = SlidingNameLabel(self._short_name)
         self._name_label.setFont(self._pixel_font)
-        self._name_label.setStyleSheet("color: #000A14; background: transparent;")
-        self._name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._name_label.setFixedWidth(64)
+        self._name_label.setFixedWidth(50)
+        self._name_label.set_text_color('#000A14')
+
+        self._name_row = QWidget()
+        self._name_row.setFixedWidth(64)
+        self._name_row.setStyleSheet("background: transparent;")
+        name_layout = QHBoxLayout(self._name_row)
+        name_layout.setContentsMargins(NAME_LABEL_ROW_OFFSET, 0, 0, 0)
+        name_layout.setSpacing(0)
+        name_layout.addWidget(self._name_label)
+        name_layout.addStretch(1)
 
         self._points_label = QLabel("—")
         self._points_label.setFont(self._pixel_font)
@@ -163,7 +212,7 @@ class PlayerCard(QWidget):
         self._points_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         inner.addWidget(self._sprite_label)
-        inner.addWidget(self._name_label)
+        inner.addWidget(self._name_row)
         inner.addWidget(self._points_label)
 
         self._bg_widget = self  # compatibility reference
@@ -182,78 +231,122 @@ class PlayerCard(QWidget):
             return '#000000'
         return '#868686'
 
+    def _get_injury_side_label(self):
+        if self._injury_status in ('OUT', 'INJURY_RESERVE'):
+            return 'O', '#cf2354'
+        if self._injury_status in ('QUESTIONABLE', 'DAY_TO_DAY', 'DOUBTFUL', 'PROBABLE'):
+            return 'DTD', '#f38ba8'
+        return None, None
+
     def paintEvent(self, event):
         super().paintEvent(event)
-        from PyQt6.QtCore import QRect
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
         # ── Outer border ──────────────────────────────────────────────────────
-        painter.setBrush(Qt.BrushStyle.NoBrush)
+        ox = (self.width() - 64) // 2    # 13px left/right strips for rotated labels
+        oy = (self.height() - 90) // 2
+        bg_rect = QRect(ox, oy, 64, 90).adjusted(1, 1, -1, -1)
+
+        # Full-card on-court highlight
+        if self._on_court and self._live_data.get('game_status', '') == 'STATUS_IN_PROGRESS':
+            painter.setBrush(QColor('#FFB347'))
+        else:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+
         painter.setPen(QPen(QColor(self.get_border_color()), 2))
-        x = (self.width() - 72) // 2
-        y = (self.height() - 90) // 2
-        bg_rect = QRect(x, y, 72, 90).adjusted(1, 1, -1, -1)
         painter.drawRoundedRect(bg_rect, 8, 8)
 
-        # Draw bars if game is active or in a break between periods
+        # Draw indicators only when game is live or in a break between periods
         if not (self._game_active or self._game_break):
             painter.end()
             return
 
-        # ── Bar layout ────────────────────────────────────────────────────────
-        bar_w        = 2
-        bar_h        = 9
-        bar_gap      = 4
-        bar_x_left   = bg_rect.left() + 3
-        bar_x_right  = bg_rect.right() - 3 - bar_w
+        # ── Layout constants ──────────────────────────────────────────────────
+        bar_w      = 2
+        bar_h      = 9
+        bar_gap    = 4
+        row_stride = bar_h + bar_gap        # 13 px
+
         bar_bottom_y = bg_rect.bottom() - 4
+        bar_x_left   = bg_rect.left() + 3
+        bar_x_right  = bg_rect.right() - 4 - bar_w   # quarter bar left edge
 
-        # ── Left bars — fouls (red), bottom to top ────────────────────────────
+        # ── Rotated "FLS" label — left padding strip ──────────────────────────
+        mid_y    = bg_rect.top() + bg_rect.height() // 2
+        left_cx  = ox // 2
+        right_cx = bg_rect.right() + (self.width() - bg_rect.right()) // 2
+
+        painter.save()
+        painter.setFont(_load_pixel_font(5))
+        painter.setPen(QColor('#344d5c'))
+        painter.translate(left_cx, mid_y)
+        painter.rotate(-90)
+        painter.drawText(QRect(-18, -4, 36, 8), Qt.AlignmentFlag.AlignCenter, 'FLS')
+        painter.restore()
+
+        injury_label, injury_color = self._get_injury_side_label()
+        if injury_label:
+            painter.save()
+            painter.setFont(_load_pixel_font(5))
+            painter.setPen(QColor(injury_color))
+            painter.translate(left_cx, bg_rect.top() + 14)
+            painter.rotate(-90)
+            painter.drawText(QRect(-18, -4, 36, 8), Qt.AlignmentFlag.AlignCenter, injury_label)
+            painter.restore()
+
+        # ── Rotated "QTR" label — right padding strip ─────────────────────────
+        painter.save()
+        painter.setFont(_load_pixel_font(5))
+        painter.setPen(QColor('#344d5c'))
+        painter.translate(right_cx, mid_y)
+        painter.rotate(90)
+        painter.drawText(QRect(-18, -4, 36, 8), Qt.AlignmentFlag.AlignCenter, 'QTR')
+        painter.restore()
+
+        # ── Left column: foul bars, bottom → top ──────────────────────────────
         for i in range(6):
-            bar_y = bar_bottom_y - i * (bar_h + bar_gap) - bar_h
-            rect  = QRect(bar_x_left, bar_y, bar_w, bar_h)
+            bar_y = bar_bottom_y - i * row_stride - bar_h
+            rect = QRect(bar_x_left, bar_y, bar_w, bar_h)
             if i < self._fouls:
-                color = '#FF0000' if i >= 4 else '#f38ba8'
-                painter.fillRect(rect, QColor(color))
+                painter.fillRect(rect, QColor('#000000'))
 
-        # ── Right bars — quarters (green), bottom to top ──────────────────────
+        # ── Right column: quarter bars + optional OT bar, bottom → top ────────
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        bar_col = QColor('#000000')
+
         if self._ot_period > 0:
-            total_bars = 5
-            for i in range(total_bars):
-                bar_y = bar_bottom_y - i * (bar_h + bar_gap) - bar_h
-                rect = QRect(bar_x_right, bar_y, bar_w, bar_h)
-                is_ot_bar = i == total_bars - 1
+            for i in range(5):
+                bar_y  = bar_bottom_y - i * row_stride - bar_h
+                rect   = QRect(bar_x_right, bar_y, bar_w, bar_h)
+                is_ot  = (i == 4)
 
-                if is_ot_bar:
-                    if self._game_active:
-                        color = '#a6e3a1' if self._quarter_pulse_state else '#d4f0d4'
-                    else:
-                        color = '#a6e3a1'
-                    painter.fillRect(rect, QColor(color))
+                if is_ot:
+                    if not (self._game_active and not self._quarter_pulse_state):
+                        painter.fillRect(rect, bar_col)
 
                     ot_label = 'OT' if self._ot_label_show_text else str(self._ot_period)
-                    painter.setPen(QColor('#000A14'))
+                    painter.save()
                     painter.setFont(_load_pixel_font(5))
-                    label_rect = QRect(bar_x_right - 13, bar_y - 11, bar_w + 20, 10)
-                    painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, ot_label)
+                    painter.setPen(QColor('#000A14'))
+                    lbl_rect = QRect(bar_x_right - 13, bar_y - 11, bar_w + 20, 10)
+                    painter.drawText(lbl_rect, Qt.AlignmentFlag.AlignCenter, ot_label)
+                    painter.restore()
                 else:
-                    painter.fillRect(rect, QColor('#a6e3a1'))
+                    painter.fillRect(rect, bar_col)
         else:
             for i in range(4):
-                bar_y   = bar_bottom_y - i * (bar_h + bar_gap) - bar_h
-                rect    = QRect(bar_x_right, bar_y, bar_w, bar_h)
-                quarter = i + 1
+                q     = i + 1
+                bar_y = bar_bottom_y - i * row_stride - bar_h
+                rect  = QRect(bar_x_right, bar_y, bar_w, bar_h)
 
-                if quarter < self._quarter:
-                    painter.fillRect(rect, QColor('#a6e3a1'))
-                elif quarter == self._quarter:
-                    if self._game_active:
-                        color = '#a6e3a1' if self._quarter_pulse_state else '#d4f0d4'
-                    else:
-                        color = '#a6e3a1'
-                    painter.fillRect(rect, QColor(color))
+                if q < self._quarter:
+                    painter.fillRect(rect, bar_col)
+                elif q == self._quarter:
+                    if not (self._game_active and not self._quarter_pulse_state):
+                        painter.fillRect(rect, bar_col)
 
         painter.end()
 
@@ -265,7 +358,7 @@ class PlayerCard(QWidget):
         else:
             self._quarter_pulse_state = False
 
-        if self._game_active and self._ot_period > 0:
+        if (self._game_active or self._game_break) and self._ot_period > 0:
             self._ot_label_show_text = PlayerCard._shared_ot_label_show_text
         else:
             self._ot_label_show_text = True
@@ -464,15 +557,7 @@ class PlayerCard(QWidget):
 
         self._points_label.setStyleSheet(f"color: {text_color}; background: transparent;")
 
-        if self._on_court and status == 'STATUS_IN_PROGRESS':
-            self._name_label.setStyleSheet(
-                f"color: {text_color};"
-                "background-color: #FFB347;"
-                "border: none;"
-                "border-radius: 2px;"
-            )
-        else:
-            self._name_label.setStyleSheet(f"color: {text_color}; background: transparent;")
+        self._name_label.set_text_color(text_color)
 
         if mode == 'LIVE':
             if no_game:
@@ -494,12 +579,7 @@ class PlayerCard(QWidget):
             self._points_label.setText(f"{int(pts)}/{int(reb)}/{int(ast)}")
 
         # Name label text
-        if is_injured:
-            if self._injury_status in ('OUT', 'INJURY_RESERVE'):
-                self._name_label.setText(self._short_name + " O")
-            else:
-                self._name_label.setText(self._short_name + " DTD")
-        elif status in ACTIVE_STATUSES:
+        if status in ACTIVE_STATUSES:
             self._name_label.setText(self._short_name)
         else:
             self._name_label.setText(self._short_name)
@@ -513,6 +593,7 @@ class PlayerCard(QWidget):
         self._scroll_timer       = QTimer()
         self._scroll_timer.timeout.connect(self._tick_name_scroll)
         self._scroll_offset      = 0
+        self._scroll_min         = NAME_LABEL_LEFT_PADDING
         self._scroll_direction   = 1
         self._scroll_pausing     = False
         self._scroll_pause_ticks = 0
@@ -524,17 +605,19 @@ class PlayerCard(QWidget):
         label_width = self._name_label.width()
         if text_width > label_width:
             self._name_needs_scroll  = True
-            self._scroll_offset      = 0
+            self._scroll_offset      = self._scroll_min
             self._scroll_direction   = 1
             self._scroll_pausing     = False
             self._scroll_pause_ticks = 0
-            self._scroll_max         = text_width - label_width + 4
+            self._scroll_max         = text_width - label_width + NAME_LABEL_LEFT_PADDING
+            self._name_label.set_scroll_enabled(True)
+            self._name_label.set_scroll_offset(self._scroll_offset)
             self._scroll_timer.start(NAME_SCROLL_FPS)
         else:
             self._name_needs_scroll = False
             self._scroll_timer.stop()
-            self._name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._name_label.setContentsMargins(0, 0, 0, 0)
+            self._name_label.set_scroll_enabled(False)
+            self._name_label.set_scroll_offset(0)
 
     def _tick_name_scroll(self):
         if self._scroll_pausing:
@@ -544,16 +627,15 @@ class PlayerCard(QWidget):
             return
 
         self._scroll_offset += self._scroll_direction * NAME_SCROLL_SPEED
-        self._name_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self._name_label.setContentsMargins(-int(self._scroll_offset), 0, 0, 0)
+        self._name_label.set_scroll_offset(self._scroll_offset)
 
         if self._scroll_offset >= self._scroll_max:
             self._scroll_offset    = self._scroll_max
             self._scroll_direction = -1
             self._scroll_pausing   = True
             self._scroll_pause_ticks = NAME_SCROLL_PAUSE
-        elif self._scroll_offset <= 0:
-            self._scroll_offset    = 0
+        elif self._scroll_offset <= self._scroll_min:
+            self._scroll_offset    = self._scroll_min
             self._scroll_direction = 1
             self._scroll_pausing   = True
             self._scroll_pause_ticks = NAME_SCROLL_PAUSE

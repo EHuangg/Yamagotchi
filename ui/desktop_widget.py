@@ -133,7 +133,7 @@ class DesktopWidget(QMainWindow):
         self._players = players
 
         central = QWidget()
-        central.setStyleSheet("background-color: rgba(167, 194, 229, 200);")
+        central.setStyleSheet("background-color: rgba(216, 226, 240, 200);")
         self.setCentralWidget(central)
 
         if self._is_horizontal():
@@ -253,7 +253,7 @@ class DesktopWidget(QMainWindow):
 
         # ── Nav buttons ───────────────────────────────────────────────────────
         nav_widget = QWidget()
-        nav_widget.setStyleSheet("background: transparent; border: none;")
+        nav_widget.setStyleSheet("background: rgba(167, 194, 229, 200); border: none;")
 
         if self._is_horizontal():
             nav_widget.setFixedWidth(28)
@@ -350,7 +350,7 @@ class DesktopWidget(QMainWindow):
             nba_team=getattr(player, 'nba_team', ''),
             injury_status=getattr(player, 'injury_status', ''),
         )
-        card.setFixedSize(76, 94)
+        card.setFixedSize(90, 94)
         card._refresh_display()  # apply injury tag immediately
         layout.addWidget(card)
 

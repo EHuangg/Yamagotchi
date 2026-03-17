@@ -38,7 +38,7 @@ class Poller(QThread):
             if not self._force_refresh:
                 interval = self._get_poll_interval()
                 print(f"[Poller] Sleeping {interval}s (live window: {self._is_active_game_window()})")
-                self.msleep(interval * 1000)
+                self._sleep_interruptible(interval)
 
             self._force_refresh = False
 
@@ -72,7 +72,16 @@ class Poller(QThread):
 
     def stop(self):
         self._running = False
+        self.requestInterruption()
         self.quit()
+
+    def _sleep_interruptible(self, seconds: int):
+        # Sleep in short chunks so stop()/Ctrl+C can break out quickly.
+        remaining_ms = max(0, int(seconds * 1000))
+        step_ms = 200
+        while remaining_ms > 0 and self._running and not self.isInterruptionRequested():
+            self.msleep(min(step_ms, remaining_ms))
+            remaining_ms -= step_ms
 
     def _now_est(self) -> datetime:
         return datetime.now(EASTERN)
