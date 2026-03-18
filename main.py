@@ -20,6 +20,9 @@ from api.live_poller import LivePoller
 from events.animation_trigger import AnimationTrigger
 from events.event_bus import event_bus
 
+VERSION = "0.1.0-beta.1"
+
+
 def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')))
@@ -30,6 +33,7 @@ def main():
         print(message)
     qInstallMessageHandler(suppress_qt_warnings)
 
+    print(f"Starting Yamagotchi v{VERSION}")
     sprite_loader.ensure_loaded()
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -140,7 +144,7 @@ def main():
     tray_menu.addAction(quit_action)
 
     tray.setContextMenu(tray_menu)
-    tray.setToolTip("Yamagotchi")
+    tray.setToolTip(f"Yamagotchi v{VERSION}")
     tray.activated.connect(lambda reason: show_widget() if reason == QSystemTrayIcon.ActivationReason.DoubleClick and not widget.isVisible() else hide_widget() if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None)
     tray.show()
 
