@@ -121,9 +121,23 @@ class SpriteLoader:
         
         return self._frames.get(key, [])
     
-    def get_missed_shot_frames(self) -> list[QPixmap]:
-        """Get missedShot frames."""
-        return self._frames.get("missedshot", [])
+    def get_missed_shot_frames(self, player_name: str = "", jersey: str = "") -> list[QPixmap]:
+        """Get missedShot frames, preferring player skin/jersey variants when available."""
+        clean_name = _clean_player_name(player_name) if player_name else ""
+        skin = _SKIN_TONES.get(clean_name, 'medium')
+
+        candidate_keys = []
+        if jersey:
+            candidate_keys.append(f"missedshot_{skin}_bald_{jersey}")
+        candidate_keys.append(f"missedshot_{skin}_bald_lakers")
+        candidate_keys.append(f"missedshot_{skin}")
+        candidate_keys.append("missedshot")
+
+        for key in candidate_keys:
+            frames = self._frames.get(key, [])
+            if frames:
+                return frames
+        return []
     
     def get_block_frames(self, player_name: str) -> list[QPixmap]:
         """Get block frames for player."""

@@ -468,16 +468,33 @@ class PlayerCard(QWidget):
         elif animation_name == 'missedShot':
             made_anim = sprite_loader.get_animation('madeShot')
             made_pixmaps = sprite_loader.get_made_shot_frames(self.player_name, self._jersey)
-            missed_pixmaps = sprite_loader.get_missed_shot_frames()
+            missed_pixmaps = sprite_loader.get_missed_shot_frames(self.player_name, self._jersey)
 
             stitched = []
-            for idx in made_anim.get('frames', [])[:4]:
+            made_indices = made_anim.get('frames', [])
+            intro_indices = made_indices[:4]
+
+            for idx in intro_indices:
                 if 0 <= idx < len(made_pixmaps):
                     stitched.append(made_pixmaps[idx])
 
-            for idx in anim.get('frames', []):
-                if 0 <= idx < len(missed_pixmaps):
-                    stitched.append(missed_pixmaps[idx])
+            # Continue with skin-consistent frames from madeShot sequence first.
+            continuation_start = len(intro_indices)
+            continuation_count = len(anim.get('frames', []))
+            used_continuation_from_made = False
+            for i in range(continuation_count):
+                seq_idx = continuation_start + i
+                if seq_idx < len(made_indices):
+                    made_frame_idx = made_indices[seq_idx]
+                    if 0 <= made_frame_idx < len(made_pixmaps):
+                        stitched.append(made_pixmaps[made_frame_idx])
+                        used_continuation_from_made = True
+
+            # Fallback to dedicated missedShot sheet when needed.
+            if not used_continuation_from_made:
+                for idx in anim.get('frames', []):
+                    if 0 <= idx < len(missed_pixmaps):
+                        stitched.append(missed_pixmaps[idx])
 
             self._anim_pixmaps = stitched if stitched else missed_pixmaps
             self._frame_list = list(range(len(self._anim_pixmaps)))

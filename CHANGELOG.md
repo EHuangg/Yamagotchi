@@ -15,6 +15,12 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Fixed
 - Placeholder for upcoming changes.
 
+## [0.1.1] - 2026-03-17
+
+### Fixed
+- Ensured event animations consistently match each player's skin tone mapping.
+- Improved missed-shot stitching so continuation stays skin-consistent.
+
 ## [0.1.0-beta.1] - 2026-03-17
 
 ### Added
@@ -33,5 +39,6 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Notes
 - This is a pre-release build
 
-[Unreleased]: https://github.com/EHuangg/Yamagotchi/compare/v0.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/EHuangg/Yamagotchi/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/EHuangg/Yamagotchi/releases/tag/v0.1.1
 [0.1.0-beta.1]: https://github.com/EHuangg/Yamagotchi/releases/tag/v0.1.0-beta.1
