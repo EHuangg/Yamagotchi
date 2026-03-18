@@ -503,14 +503,7 @@ class DesktopWidget(QMainWindow):
                 break
             elif m.get('opp_team_id') == self._current_team_id:
                 self._current_matchup_idx = i
-                selected_matchup = {
-                    'my_team':     m['opp_team'],
-                    'my_score':    m['opp_score'],
-                    'my_team_id':  m['opp_team_id'],
-                    'opp_team':    m['my_team'],
-                    'opp_score':   m['my_score'],
-                    'opp_team_id': m['my_team_id'],
-                }
+                selected_matchup = m
                 break
 
         self._current_matchup_idx = min(

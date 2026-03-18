@@ -5,7 +5,11 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('build\\package_config\\settings.json', 'config')],
+    datas=[
+        ('assets', 'assets'),
+        ('build\\package_config\\settings.json', 'config'),
+        ('config\\skin_tones.json', 'config'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
