@@ -1,4 +1,3 @@
-config/settings.json
 .venv/
 __pycache__/
 *.pyc

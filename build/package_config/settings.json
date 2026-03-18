@@ -1,1 +1,18 @@
-{}
+{
+	"window": {
+		"x": 651,
+		"y": 556,
+		"width": 800,
+		"height": 160
+	},
+	"espn": {
+		"league_id": 0,
+		"year": 2026,
+		"espn_s2": "",
+		"swid": "",
+		"last_viewed_team_id": 1
+	},
+	"dock_edge": "right",
+	"display_mode": "STARTERS",
+	"monitor": 0
+}
