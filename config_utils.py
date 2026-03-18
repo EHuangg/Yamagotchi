@@ -5,6 +5,7 @@ import os
 import sys
 
 APP_NAME = "Yamagotchi"
+APP_VERSION = "0.1.0-beta.1"
 
 _DEFAULT_SETTINGS = {
 	"window": {

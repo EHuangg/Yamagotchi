@@ -10,7 +10,7 @@ from ui.desktop_widget import DesktopWidget, BAR_THICKNESS
 from ui.setup_dialog import check_and_run_setup
 from ui.sprite_loader import sprite_loader
 from ui.appbar import AppBar
-from config_utils import SETTINGS_PATH
+from config_utils import SETTINGS_PATH, APP_VERSION
 
 from api.espn_client import ESPNClient
 from api.live_client import LiveClient
@@ -19,9 +19,6 @@ from api.poller import Poller
 from api.live_poller import LivePoller
 from events.animation_trigger import AnimationTrigger
 from events.event_bus import event_bus
-
-VERSION = "0.1.0-beta.1"
-
 
 def main():
     app = QApplication(sys.argv)
@@ -33,7 +30,7 @@ def main():
         print(message)
     qInstallMessageHandler(suppress_qt_warnings)
 
-    print(f"Starting Yamagotchi v{VERSION}")
+    print(f"Starting Yamagotchi v{APP_VERSION}")
     sprite_loader.ensure_loaded()
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -144,7 +141,7 @@ def main():
     tray_menu.addAction(quit_action)
 
     tray.setContextMenu(tray_menu)
-    tray.setToolTip(f"Yamagotchi v{VERSION}")
+    tray.setToolTip(f"Yamagotchi v{APP_VERSION}")
     tray.activated.connect(lambda reason: show_widget() if reason == QSystemTrayIcon.ActivationReason.DoubleClick and not widget.isVisible() else hide_widget() if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None)
     tray.show()
 

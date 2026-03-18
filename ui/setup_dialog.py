@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QFont, QFontDatabase
-from config_utils import SETTINGS_PATH
+from config_utils import SETTINGS_PATH, APP_VERSION
 import os
 
 FONT_PATH    = os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'pixel.ttf')
@@ -180,6 +180,12 @@ class SetupDialog(QDialog):
         self._status.setStyleSheet("color: #c85977;")
         self._status.setWordWrap(True)
         layout.addWidget(self._status)
+
+        self._version_label = QLabel(f"v{APP_VERSION}")
+        self._version_label.setFont(_load_pixel_font(5))
+        self._version_label.setStyleSheet("color: #6f7f92;")
+        self._version_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        layout.addWidget(self._version_label)
 
         root.addWidget(content)
 
